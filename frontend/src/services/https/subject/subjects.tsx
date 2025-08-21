@@ -1,46 +1,25 @@
 import axios from "axios";
-import { type StudentInterface } from "../../../interfaces/Student";
+import { type SubjectInterface } from "../../../interfaces/Subjects";
 
 const apiUrl = "http://localhost:8000";
 
+export const createSubject = async (
+  data: SubjectInterface
+): Promise<SubjectInterface> => {
+  try {
+    // map camelCase fields to snake_case expected by API if necessary
+    const payload = {
+      subject_id: data.SubjectID,
+      subject_name: data.SubjectName,
+      credit: data.Credit,
+      major_id: data.MajorID,
+      faculty_id: data.FacultyID,
+    };
 
-export const getNameStudent = async (username: string) => {
-    //console.log("Fetching student data for:", username);
-    if (!username){
-        throw new Error("Username is required");
-    }
-    try {
-        const response = await axios.get(`${apiUrl}/students/${username}`);
-        console.log("api student profile" , response)
-        return response.data;
-    } 
-    catch (error) {
-        console.error("Error fetching student data:", error);
-        throw error;
-    }
+    const response = await axios.post(`${apiUrl}/subjects/`, payload);
+    return response.data as SubjectInterface;
+  } catch (error) {
+    console.error("Error creating subject:", error);
+    throw error;
+  }
 };
-
-export const getStudentAll = async (): Promise<StudentInterface[]> => {
-    //console.log("Fetching student data for:", username);
-    try{
-        const response = await axios.get(`${apiUrl}/students/`)
-        console.log("api student data:", response);
-
-        return response.data;
-    }
-    catch(error){
-        console.error("Error fetching student data:", error);
-        throw error;
-    }
-};
-
-export const createStudent = async(data: StudentInterface): Promise<StudentInterface> => {
-    try {
-        const responce = await axios.post(`${apiUrl}/students/`, data);
-        return responce.data;
-    }
-    catch (error) {
-        console.error("Error creating student:", error);
-        throw error;
-    }
-}

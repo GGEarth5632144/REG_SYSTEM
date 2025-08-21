@@ -3,6 +3,14 @@ import { type SubjectStudyTimeInterface } from "../../../interfaces/SubjectsStud
 
 const apiUrl = "http://localhost:8000";
 
+const mapStudyTime = (data: any): SubjectStudyTimeInterface => ({
+  ID: data.id ?? data.ID,
+  SubjectID: data.subjectId ?? data.subject_id ?? data.SubjectID,
+  StartAt: data.start ?? data.start_at ?? data.StartAt,
+  EndAt: data.end ?? data.end_at ?? data.EndAt,
+});
+
+
 /**
  * ✅ ดึงช่วงเวลาเรียนทั้งหมดของรายวิชา
  * GET /subjects/:subjectId/times
@@ -16,7 +24,7 @@ export const getStudyTimesBySubject = async (
   try {
     const response = await axios.get(`${apiUrl}/subjects/${subjectId}/times/`);
     console.log("api study times:", response);
-    return response.data as SubjectStudyTimeInterface[];
+    return (Array.isArray(response.data) ? response.data : []).map(mapStudyTime);
   } catch (error) {
     console.error("Error fetching study times:", error);
     throw error;
@@ -39,7 +47,7 @@ export const getStudyTimeOne = async (
     const response = await axios.get(
       `${apiUrl}/subjects/${subjectId}/times/${timeId}`,
     );
-    return response.data as SubjectStudyTimeInterface;
+    return mapStudyTime(response.data);
   } catch (error) {
     console.error("Error fetching study time:", error);
     throw error;
@@ -61,7 +69,7 @@ export const addStudyTime = async (
       `${apiUrl}/subjects/${subjectId}/times/`,
       data,
     );
-    return response.data as SubjectStudyTimeInterface;
+    return mapStudyTime(response.data);
   } catch (error) {
     console.error("Error creating study time:", error);
     throw error;
@@ -86,7 +94,7 @@ export const updateStudyTime = async (
       `${apiUrl}/subjects/${subjectId}/times/${timeId}`,
       data,
     );
-    return response.data as SubjectStudyTimeInterface;
+    return mapStudyTime(response.data);
   } catch (error) {
     console.error("Error updating study time:", error);
     throw error;

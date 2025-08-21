@@ -22,7 +22,10 @@ import {
 } from "antd";
 import { PlusOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
-
+import { type SubjectInterface } from "../../../../../interfaces/Subjects";
+import { type SubjectStudyTimeInterface } from "../../../../../interfaces/SubjectsStudyTime";
+import { createSubject } from "../../../../../services/https/subject/subjects";
+import { addStudyTime } from "../../../../../services/https/subjectstudytime/subjectsstudytime";
 const { Content } = Layout;
 const { Title, Text } = Typography;
 const { Option } = Select;
@@ -33,26 +36,14 @@ const { Option } = Select;
 type Faculty = { id: string; name: string };
 type Major = { id: string; name: string; facultyId?: string };
 
-type SubjectRow = {
-  subjectId: string;
-  name: string;
-  credit: number;
-  schedule: { start: string; end: string }[];
+interface SubjectRow extends SubjectInterface {
+  schedule: SubjectStudyTimeInterface[];
   formattedSchedule?: string[];
-  facultyId: string;
-  facultyName?: string;
-  majorId: string;
-  majorName?: string;
-};
+}
 
-type FormValues = {
-  subjectId?: string;
-  name: string;
-  credit: number;
-  facultyId: string;
-  majorId: string;
+interface FormValues extends SubjectInterface {
   schedule: [dayjs.Dayjs, dayjs.Dayjs][];
-};
+}
 
 // -----------------------------
 // Styles
@@ -97,7 +88,7 @@ const ADD: React.FC = () => {
   const [loadingMajors, setLoadingMajors] = useState(false);
 
   // faculty selection (เพื่อ filter major)
-  const selectedFacultyId = Form.useWatch("facultyId", form);
+  const selectedFacultyId = Form.useWatch("FacultyID", form);
 
   // -----------------------------
   // Helpers: fetch & map
@@ -109,9 +100,9 @@ const ADD: React.FC = () => {
       if (!resp.ok) throw new Error("Failed to load faculties");
       // สมมติ backend คืน snake_case: [{ faculty_id, faculty_name }]
       const data = await resp.json();
-      const mapped: Faculty[] = (Array.isArray(data) ? data : []).map((f: any) => ({
-        id: f.faculty_id ?? f.FacultyID ?? f.id,
-        name: f.faculty_name ?? f.FacultyName ?? f.name,
+      const mapped: Faculty[] = (Array.isArray(data) ? data : []).map((f) => ({
+        id: f.faculty_id ?? f.facultyId ?? f.FacultyID ?? f.id,
+        name: f.faculty_name ?? f.facultyName ?? f.FacultyName ?? f.name,
       }));
       setFaculties(mapped);
     } catch {
@@ -128,10 +119,10 @@ const ADD: React.FC = () => {
       if (!resp.ok) throw new Error("Failed to load majors");
       // สมมติ backend คืน snake_case: [{ major_id, major_name, faculty_id }]
       const data = await resp.json();
-      const mapped: Major[] = (Array.isArray(data) ? data : []).map((m: any) => ({
-        id: m.major_id ?? m.MajorID ?? m.id,
-        name: m.major_name ?? m.MajorName ?? m.name,
-        facultyId: m.faculty_id ?? m.FacultyID,
+      const mapped: Major[] = (Array.isArray(data) ? data : []).map((m) => ({
+        id: m.major_id ?? m.majorId ?? m.MajorID ?? m.id,
+        name: m.major_name ?? m.majorName ?? m.MajorName ?? m.name,
+        facultyId: m.faculty_id ?? m.facultyId ?? m.FacultyID,
       }));
       setMajors(mapped);
     } catch {
@@ -148,25 +139,37 @@ const ADD: React.FC = () => {
       const data = await resp.json();
 
       // สมมติ backend คืน snake_case: subject_id, subject_name, credit, major_id, faculty_id, study_times, major_name, faculty_name
-      const mapped: SubjectRow[] = (Array.isArray(data) ? data : []).map((s: any) => {
-        const schedule = (s.study_times ?? s.schedule ?? []) as { start: string; end: string }[];
-        const formattedSchedule = schedule.map((range) => {
-          const start = dayjs(range.start, "YYYY-MM-DD HH:mm");
-          const end = dayjs(range.end, "YYYY-MM-DD HH:mm");
-          return `${start.format("dddd HH:mm")} - ${end.format("dddd HH:mm")}`;
-        });
-        return {
-          subjectId: s.subject_id ?? s.SubjectID ?? s.id,
-          name: s.subject_name ?? s.SubjectName ?? s.name,
-          credit: s.credit,
-          schedule,
-          formattedSchedule,
-          facultyId: s.faculty_id ?? s.FacultyID,
-          facultyName: s.faculty_name ?? s.FacultyName,
-          majorId: s.major_id ?? s.MajorID,
-          majorName: s.major_name ?? s.MajorName,
-        };
-      });
+      const mapped: SubjectRow[] = (Array.isArray(data) ? data : []).map(
+        (s) => {
+          const schedule: SubjectStudyTimeInterface[] = (
+            s.study_times ??
+            s.schedule ??
+            []
+          ).map((range) => {
+            const start = range.start || range.start_time || range.StartAt;
+            const end = range.end || range.end_time || range.EndAt;
+            return { StartAt: start, EndAt: end };
+          });
+          const formattedSchedule = schedule.map((t) => {
+            const start = dayjs(t.StartAt, "YYYY-MM-DD HH:mm");
+            const end = dayjs(t.EndAt, "YYYY-MM-DD HH:mm");
+            return `${start.format("dddd HH:mm")} - ${end.format(
+              "dddd HH:mm"
+            )}`;
+          });
+          return {
+            subjectId: s.subject_id ?? s.subjectId ?? s.SubjectID ?? s.id,
+            name: s.subject_name ?? s.subjectName ?? s.SubjectName ?? s.name,
+            Credit: s.credit,
+            schedule,
+            formattedSchedule,
+            facultyId: s.faculty_id ?? s.facultyId ?? s.FacultyID,
+            facultyName: s.faculty_name ?? s.facultyName ?? s.FacultyName,
+            majorId: s.major_id ?? s.majorId ?? s.MajorID,
+            majorName: s.major_name ?? s.majorName ?? s.MajorName,
+          };
+        }
+      );
 
       setSubjects(mapped);
     } catch {
@@ -188,7 +191,9 @@ const ADD: React.FC = () => {
   // -----------------------------
   const filteredMajors = useMemo(() => {
     if (!selectedFacultyId) return majors;
-    return majors.filter((m) => !m.facultyId || m.facultyId === selectedFacultyId);
+    return majors.filter(
+      (m) => !m.facultyId || m.facultyId === selectedFacultyId
+    );
   }, [majors, selectedFacultyId]);
 
   // -----------------------------
@@ -197,34 +202,29 @@ const ADD: React.FC = () => {
   const onFinish = async (values: FormValues) => {
     try {
       // 1) สร้างวิชา
-      const resp = await fetch("/api/subjects", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          subject_id: values.subjectId, // ถ้า backend gen เอง ตัดออกได้
-          subject_name: values.name,
-          credit: values.credit,
-          major_id: values.majorId,
-          faculty_id: values.facultyId,
-        }),
+      const created = await createSubject({
+        SubjectID: values.SubjectID,
+        SubjectName: values.SubjectName,
+        Credit: values.Credit,
+        MajorID: values.MajorID,
+        FacultyID: values.FacultyID,
       });
-      if (!resp.ok) throw new Error("Failed to create subject");
-      const data = await resp.json();
-      const subjectId = data.subject_id ?? data.SubjectID ?? values.subjectId;
+      const subjectId =
+        (
+          created as SubjectInterface & {
+            subject_id?: string;
+          }
+        ).subject_id ??
+        created.SubjectID ??
+        values.SubjectID;
       if (!subjectId) throw new Error("Missing subject_id from response");
 
       // 2) สร้างช่วงเวลาเรียน
       await Promise.all(
         (values.schedule || []).map((range) =>
-          fetch(`/api/subjects/${subjectId}/times`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              start: range[0].format("YYYY-MM-DD HH:mm"),
-              end: range[1].format("YYYY-MM-DD HH:mm"),
-            }),
-          }).then((res) => {
-            if (!res.ok) throw new Error("Failed to create time");
+          addStudyTime(String(subjectId), {
+            start: range[0].format("YYYY-MM-DD HH:mm"),
+            end: range[1].format("YYYY-MM-DD HH:mm"),
           })
         )
       );
@@ -268,17 +268,20 @@ const ADD: React.FC = () => {
             {/* ชื่อรายวิชา */}
             <Form.Item
               label="ชื่อรายวิชา"
-              name="name"
+              name="SubjectName"
               rules={[{ required: true, message: "กรุณากรอกชื่อรายวิชา" }]}
               style={{ width: "100%" }}
             >
-              <Input placeholder="เช่น คณิตศาสตร์เบื้องต้น" style={{ height: 44, maxWidth: 600, fontSize: 15 }} />
+              <Input
+                placeholder="เช่น คณิตศาสตร์เบื้องต้น"
+                style={{ height: 44, maxWidth: 600, fontSize: 15 }}
+              />
             </Form.Item>
 
             {/* หน่วยกิต */}
             <Form.Item
               label="หน่วยกิจ"
-              name="credit"
+              name="Credit"
               rules={[
                 { required: true, message: "กรุณากรอกหน่วยกิจ" },
                 {
@@ -295,7 +298,11 @@ const ADD: React.FC = () => {
                   หมายเหตุ: หน่วยกิจต้องเป็นตัวเลขระหว่าง 1 ถึง 5
                 </Typography.Text>
                 <div style={{ height: 5 }} aria-hidden="true" />
-                <Input placeholder="เช่น 3" inputMode="numeric" style={{ height: 44, maxWidth: 300, fontSize: 15 }} />
+                <Input
+                  placeholder="เช่น 3"
+                  inputMode="numeric"
+                  style={{ height: 44, maxWidth: 300, fontSize: 15 }}
+                />
               </>
             </Form.Item>
 
@@ -315,21 +322,41 @@ const ADD: React.FC = () => {
                   {(fields, { add, remove }) => (
                     <>
                       {fields.map(({ key, name }) => (
-                        <Space key={key} style={{ display: "flex", marginBottom: 8 }} align="baseline">
+                        <Space
+                          key={key}
+                          style={{ display: "flex", marginBottom: 8 }}
+                          align="baseline"
+                        >
                           <Form.Item
                             name={name}
-                            rules={[{ required: true, message: "กรุณากรอกเวลาเรียน" }]}
+                            rules={[
+                              { required: true, message: "กรุณากรอกเวลาเรียน" },
+                            ]}
                             style={{ width: "100%" }}
                           >
-                            <DatePicker.RangePicker format="YYYY-MM-DD HH:mm" showTime minuteStep={1} />
+                            <DatePicker.RangePicker
+                              format="YYYY-MM-DD HH:mm"
+                              showTime
+                              minuteStep={1}
+                            />
                           </Form.Item>
-                          <Popconfirm title="ลบช่วงเวลานี้?" onConfirm={() => remove(name)}>
-                            <Button type="link" danger>ลบ</Button>
+                          <Popconfirm
+                            title="ลบช่วงเวลานี้?"
+                            onConfirm={() => remove(name)}
+                          >
+                            <Button type="link" danger>
+                              ลบ
+                            </Button>
                           </Popconfirm>
                         </Space>
                       ))}
                       <Form.Item>
-                        <Button type="dashed" onClick={() => add()} block icon={<PlusOutlined />}>
+                        <Button
+                          type="dashed"
+                          onClick={() => add()}
+                          block
+                          icon={<PlusOutlined />}
+                        >
                           เพิ่มเวลาเรียน
                         </Button>
                       </Form.Item>
@@ -342,7 +369,7 @@ const ADD: React.FC = () => {
             {/* เลือกคณะ */}
             <Form.Item
               label="คณะ (Faculty)"
-              name="facultyId"
+              name="FacultyID"
               rules={[{ required: true, message: "กรุณาเลือกคณะ" }]}
               style={{ width: "100%" }}
             >
@@ -363,7 +390,7 @@ const ADD: React.FC = () => {
             {/* เลือกสาขา (filter ตามคณะที่เลือก) */}
             <Form.Item
               label="สาขา (Major)"
-              name="majorId"
+              name="MajorID"
               rules={[{ required: true, message: "กรุณาเลือกสาขา" }]}
               style={{ width: "100%" }}
             >
@@ -407,8 +434,8 @@ const ADD: React.FC = () => {
           <Table
             className="custom-table-header"
             columns={[
-              { title: "ชื่อรายวิชา", dataIndex: "name" },
-              { title: "หน่วยกิจ", dataIndex: "credit" },
+              { title: "ชื่อรายวิชา", dataIndex: "SubjectName" },
+              { title: "หน่วยกิจ", dataIndex: "Credit" },
               {
                 title: "เวลาเรียน",
                 dataIndex: "formattedSchedule",
@@ -422,17 +449,21 @@ const ADD: React.FC = () => {
               },
               {
                 title: "คณะ",
-                dataIndex: "facultyName",
-                render: (_: unknown, row: SubjectRow) => row.facultyName ?? (faculties.find(f => f.id === row.facultyId)?.name || ""),
+                dataIndex: "FacultyName",
+                render: (_: unknown, row: SubjectRow) =>
+                  row.FacultyName ??
+                  (faculties.find((f) => f.id === row.FacultyID)?.name || ""),
               },
               {
                 title: "สาขา",
-                dataIndex: "majorName",
-                render: (_: unknown, row: SubjectRow) => row.majorName ?? (majors.find(m => m.id === row.majorId)?.name || ""),
+                dataIndex: "MajorName",
+                render: (_: unknown, row: SubjectRow) =>
+                  row.MajorName ??
+                  (majors.find((m) => m.id === row.MajorID)?.name || ""),
               },
             ]}
             dataSource={subjects}
-            rowKey="subjectId"
+            rowKey="SubjectID"
             pagination={false}
             rowClassName={(_record, index) =>
               index % 2 === 0 ? "table-row-light" : "table-row-dark"
