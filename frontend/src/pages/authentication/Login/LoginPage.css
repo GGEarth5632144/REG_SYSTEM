@@ -1,0 +1,102 @@
+.login-container {
+  display: flex;
+  min-height: reposive;
+  max-height: reposive; 
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  overflow: hidden;
+}
+
+.login-left {
+  flex: 1;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 32px;
+}
+.login-right {
+  flex: 1;
+  background-color: #eef1ff00;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+}
+
+.login-logo {
+  width: 18vw;
+  max-width: 230px;
+  height: auto;
+  margin-bottom: 32px;
+}
+
+
+.login-form {
+  width: 33vw;
+  max-width: 460px;
+}
+
+
+.ant-input,
+.ant-input-password,
+.ant-input-affix-wrapper {
+  height: 72px;            
+  font-size: 18px;         
+  padding: 16px;
+  border-radius: 10px;
+  background-color: #eaeaea;
+  border: none;
+  color: #000;
+  align-items: center
+}
+
+.ant-input:hover,
+.ant-input-password:hover,
+.ant-input-affix-wrapper:hover {
+  background-color: #daf8fc; /* สีตอน hover */
+  transition: background-color 0.3s ease; /* ทำให้เปลี่ยนสีลื่นขึ้น */
+}
+.icon {
+  width: 22px;
+  height: 22px;
+  margin-right: 8px;
+}
+
+
+.forgot-password {
+  text-align: right;
+  font-size: 13px;
+  color: #aaa;
+  margin-top: -10px;
+  margin-bottom: 18px;
+}
+
+
+.login-button {
+  height: 72px;
+  font-size: 20px;
+  font-weight: bold;
+  border-radius: 10px;
+  background-color: #1c2341;
+  color: white;
+  width: 100%;
+}
+
+.building-image {
+  width: 48vw;
+  max-width: 700px;
+  height: auto;
+  object-fit: contain;
+}
+
+.name{
+  width: 18vw;
+  max-width: 230px;
+  height: auto;
+  margin-bottom: 32px;
+  position: absolute; 
+  z-index: 1;
+}
