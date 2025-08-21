@@ -12,15 +12,15 @@ import (
 
 	"reg_system/controller/students"
 
-	"reg_system/controller/users"
-
 	"reg_system/controller/degree"
 	"reg_system/controller/faculty"
 	"reg_system/controller/major"
 	"reg_system/controller/position"
 	"reg_system/controller/status"
-	"reg_system/controller/subject"
-    "reg_system/controller/subjectstudytime"
+	subjects "reg_system/controller/subject"
+	"reg_system/controller/subjectstudytime"
+	"reg_system/controller/users"
+
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 )
@@ -28,45 +28,38 @@ import (
 const port = "8000"
 
 func main() {
+	// -------------------- Database --------------------
 	config.ConnectionDB()
 	config.SetupDatabase()
 
-	// Data Test
+	// -------------------- Seed/Test Data --------------------
 	test.ExampleData()
 
+	// -------------------- Gin Setup --------------------
 	r := gin.Default()
-
 	r.Use(cors.Default())
-
 	r.Use(CORSMiddleware())
 
-	// Authentication
+	// -------------------- Auth --------------------
 	r.POST("/signin", users.SignIn)
 
-	//---------------------------------------------------------
-	//Admin
+	// -------------------- Admin --------------------
 	adminGroup := r.Group("/admin")
 	{
 		adminGroup.GET("/:id", admins.GetAdminID)
 	}
-	//---------------------------------------------------------
 
-	//---------------------------------------------------------
-	//Student
-
+	// -------------------- Students --------------------
 	studentGroup := r.Group("/students")
 	{
 		studentGroup.GET("/:id", students.GetStudentID)
 		studentGroup.POST("/", students.CreateStudent)
 		studentGroup.GET("/", students.GetStudentAll)
-
 		studentGroup.PUT("/:id", students.UpdateStudent)
 		studentGroup.DELETE("/:id", students.DeleteStudent)
 	}
-	//---------------------------------------------------------
 
-	//---------------------------------------------------------
-	//Teacher
+	// -------------------- Teachers --------------------
 	teacherGroup := r.Group("/teachers")
 	{
 		teacherGroup.GET("/:id", teachers.GetTeacherID)
@@ -76,103 +69,111 @@ func main() {
 		teacherGroup.DELETE("/:id", teachers.DeleteTeacher)
 	}
 
-	//---------------------------------------------------------
-	//Major
+	// -------------------- Majors --------------------
 	majorGroup := r.Group("/majors")
 	{
 		majorGroup.GET("/", major.GetMajorAll)
 		majorGroup.POST("/", major.CreateMajor)
 	}
 
-	//---------------------------------------------------------
-	//Faculty
+	// -------------------- Faculties --------------------
 	facultyGroup := r.Group("/faculties")
 	{
 		facultyGroup.GET("/", faculty.GetFacultyAll)
 		facultyGroup.POST("/", faculty.CreateFaculty)
 	}
 
-	//---------------------------------------------------------
-	// Degree
+	// -------------------- Degrees --------------------
 	degreeGroup := r.Group("/degrees")
 	{
 		degreeGroup.GET("/", degree.GetDegreeAll)
 		degreeGroup.POST("/", degree.CreateDegree)
 	}
 
-	//---------------------------------------------------------
-	// Position
+	// -------------------- Positions --------------------
 	positionGroup := r.Group("/positions")
 	{
 		positionGroup.GET("/", position.GetPositionAll)
 		positionGroup.POST("/", position.CreatePosition)
 	}
-	//---------------------------------------------------------
-	// Status
+
+	// -------------------- Statuses --------------------
 	statusGroup := r.Group("/statuses")
 	{
 		statusGroup.GET("/", status.GetStatusStudentAll)
 		statusGroup.POST("/", status.CreateStatus)
 	}
 
-	curriculumGroup := r.Group("/curriculums");{
-		curriculumGroup.GET("/" , curriculum.GetCurriculumAll)
-		curriculumGroup.POST("/" , curriculum.CreateCurriculum)
+	// -------------------- Curriculums --------------------
+	curriculumGroup := r.Group("/curriculums")
+	{
+		curriculumGroup.GET("/", curriculum.GetCurriculumAll)
+		curriculumGroup.POST("/", curriculum.CreateCurriculum)
 	}
 
-	bookGroup := r.Group("/books");{
-		bookGroup.GET("/" , curriculum.GetBookPathAll)
-		bookGroup.GET("/:filename" , curriculum.ShowBookFile)
-		bookGroup.POST("/" , curriculum.UploadBookFile)
+	// -------------------- Books (files) --------------------
+	bookGroup := r.Group("/books")
+	{
+		bookGroup.GET("/", curriculum.GetBookPathAll)
+		bookGroup.GET("/:filename", curriculum.ShowBookFile)
+		bookGroup.POST("/", curriculum.UploadBookFile)
 	}
 
-	//---------------------------------------------------------
-	// Subject
-	subjectGroup := r.Group("/subjects");{
-		subjectGroup.GET("/:id", subjects.GetSubjectID)
-		subjectGroup.POST("/", subjects.CreateSubject)
+	// -------------------- Subjects & Study Times --------------------
+	subjectGroup := r.Group("/subjects")
+	{
+		// รายการวิชาทั้งหมด
 		subjectGroup.GET("/", subjects.GetSubjectAll)
-		subjectGroup.PUT("/:id", subjects.UpdateSubject)
-		subjectGroup.DELETE("/:id", subjects.DeleteSubject)
+
+		// สร้างวิชาใหม่
+		subjectGroup.POST("/", subjects.CreateSubject)
+
+		// กลุ่มเส้นทางของวิชาเฉพาะตัว (RESTful)
+		subjectItem := subjectGroup.Group("/:subjectId")
+		{
+			subjectItem.GET("", subjects.GetSubjectID)
+			subjectItem.PUT("", subjects.UpdateSubject)
+			subjectItem.DELETE("", subjects.DeleteSubject)
+
+			// เวลาศึกษาของวิชานั้นๆ
+			times := subjectItem.Group("/times")
+			{
+				times.GET("", subjectstudytime.GetBySubject)
+				times.GET("/:timeId", subjectstudytime.GetOne)
+				times.POST("", subjectstudytime.Create)
+				times.PUT("/:timeId", subjectstudytime.Update)
+				times.DELETE("/:timeId", subjectstudytime.Delete)
+			}
+		}
 	}
-	//---------------------------------------------------------
 
-	//---------------------------------------------------------
-	// Subject Study Times (ของแต่ละรายวิชา)
-	// เส้นทางอยู่ใต้ /subjects/:subjectId/times เหมือน REST style
-	studyTimeGroup := r.Group("/subjects/:subjectId/times");{
-		studyTimeGroup.GET("/", subjectstudytime.GetBySubject)      // ลิสต์ช่วงเวลาทั้งหมดของวิชานั้น
-		studyTimeGroup.GET("/:timeId", subjectstudytime.GetOne)     // ดูช่วงเวลา 1 รายการ
-		studyTimeGroup.POST("/", subjectstudytime.Create)           // เพิ่มช่วงเวลา 1 รายการ
-		studyTimeGroup.PUT("/:timeId", subjectstudytime.Update)     // แก้ช่วงเวลา 1 รายการ
-		studyTimeGroup.DELETE("/:timeId", subjectstudytime.Delete)  // ลบช่วงเวลา 1 รายการ
-	}
-	//---------------------------------------------------------
-
-
-	
+	// -------------------- Genders --------------------
 	r.GET("/genders", gender.GetGenderAll)
 
-	// Run on port 8000
+	// -------------------- Run Server --------------------
+	// เปิดให้บริการที่ localhost:8000
 	r.Run("localhost:" + port)
 }
 
+// CORSMiddleware กำหนด CORS headers และจัดการ preflight (OPTIONS)
 func CORSMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-
-		// ตั้งค่า CORS headers
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "*") //อนุญาตให้ port ที่จะมาเชื่อมต่อ (* อนุญาตทั้งหมด)
+		// ตั้งค่า CORS headers (อนุญาตทุก origin)
+		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
 		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With")
 		c.Writer.Header().Set("Access-Control-Allow-Method", "GET , POST , PUT , DELETE , OPTIONS")
 
+		// จัดการ preflight request
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(204)
 			return
 		}
+
+		// ดำเนินการต่อ
 		c.Next()
 
-		// ตรวจสอบ error ที่เกิดระหว่างการทำงาน
+		// หากมี error ระหว่างการทำงาน ตอบกลับเป็น JSON
 		if len(c.Errors) > 0 {
 			c.JSON(-1, gin.H{
 				"status": "error",
