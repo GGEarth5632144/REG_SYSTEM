@@ -1,35 +1,67 @@
+// services/https/subject/subjects.ts
 import axios from "axios";
+import { apiUrl } from "../../api";
 import { type SubjectInterface } from "../../../interfaces/Subjects";
 
-import { apiUrl } from "../../api";
+type SubjectCreateDTO = {
+  subject_id: string;
+  subject_name: string;
+  credit: number;
+  major_id: string;
+  faculty_id: string;
+};
+
+type SubjectAPI = {
+  subject_id?: string; SubjectID?: string; id?: string;
+  subject_name?: string; SubjectName?: string; name?: string;
+  credit?: number | string;
+  major_id?: string; MajorID?: string;
+  faculty_id?: string; FacultyID?: string;
+};
+
+const mapSubjectFromAPI = (s: SubjectAPI): SubjectInterface => ({
+  SubjectID:   s.subject_id ?? s.SubjectID ?? s.id ?? "",
+  SubjectName: s.subject_name ?? s.SubjectName ?? s.name ?? "",
+  Credit:      Number(s.credit ?? 0),
+  MajorID:     s.major_id ?? s.MajorID ?? "",
+  FacultyID:   s.faculty_id ?? s.FacultyID ?? "",
+});
 
 export const createSubject = async (
   data: SubjectInterface
 ): Promise<SubjectInterface> => {
-  try {
-    // map camelCase fields to snake_case expected by API if necessary
-    const payload = {
-      subject_id: data.SubjectID,
-      subject_name: data.SubjectName,
-      credit: data.Credit,
-      major_id: data.MajorID,
-      faculty_id: data.FacultyID,
-    };
+  // ---- Runtime guards (ช่วยทั้งความถูกต้องและให้ TS narrow type) ----
+  const { SubjectID, SubjectName, MajorID, FacultyID, Credit } = data;
 
-    const response = await axios.post(`${apiUrl}/subjects/`, payload);
-    return response.data as SubjectInterface;
-  } catch (error) {
-    console.error("Error creating subject:", error);
-    throw error;
+  if (!SubjectID)   throw new Error("SubjectID is required");
+  if (!SubjectName) throw new Error("SubjectName is required");
+  if (!MajorID)     throw new Error("MajorID is required");
+  if (!FacultyID)   throw new Error("FacultyID is required");
+
+  const creditNum = Number(Credit);
+  if (!Number.isFinite(creditNum) || creditNum < 1 || creditNum > 5) {
+    throw new Error("Credit must be a number between 1 and 5");
   }
+
+  const payload: SubjectCreateDTO = {
+    subject_id:   SubjectID,    // ตอนนี้ TS รู้ว่าเป็น string แน่นอน
+    subject_name: SubjectName,
+    credit:       creditNum,
+    major_id:     MajorID,
+    faculty_id:   FacultyID,
+  };
+
+  const res = await axios.post<SubjectAPI>(
+    `${apiUrl}/subjects/`,
+    payload,
+    { headers: { "Content-Type": "application/json" } }
+  );
+
+  return mapSubjectFromAPI(res.data);
 };
 
 export const getSubjectAll = async (): Promise<SubjectInterface[]> => {
-  try {
-    const response = await axios.get(`${apiUrl}/subjects/`);
-    return response.data;
-  } catch (error) {
-    console.error("Error fetching subject data:", error);
-    throw error;
-  }
+  const res = await axios.get<SubjectAPI[]>(`${apiUrl}/subjects/`);
+  const arr = Array.isArray(res.data) ? res.data : [];
+  return arr.map(mapSubjectFromAPI);
 };

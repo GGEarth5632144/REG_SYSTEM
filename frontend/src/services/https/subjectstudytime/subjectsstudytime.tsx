@@ -2,29 +2,46 @@ import axios from "axios";
 import { type SubjectStudyTimeInterface } from "../../../interfaces/SubjectsStudyTime";
 
 import { apiUrl } from "../../api";
+type StudyTimeAPI = {
+  id?: number | string;
+  ID?: number | string;
 
-const mapStudyTime = (data: any): SubjectStudyTimeInterface => ({
-  ID: data.id ?? data.ID,
-  SubjectID: data.subjectId ?? data.subject_id ?? data.SubjectID,
-  StartAt: data.start ?? data.start_at ?? data.StartAt,
-  EndAt: data.end ?? data.end_at ?? data.EndAt,
+  subjectId?: string;
+  subject_id?: string;
+  SubjectID?: string;
+
+  start?: string;
+  start_at?: string;
+  StartAt?: string;
+
+  end?: string;
+  end_at?: string;
+  EndAt?: string;
+};
+
+const mapStudyTime = (data: StudyTimeAPI): SubjectStudyTimeInterface => ({
+  ID: Number(data.id ?? data.ID),
+  SubjectID: data.subjectId ?? data.subject_id ?? data.SubjectID ?? "",
+  StartAt: data.start ?? data.start_at ?? data.StartAt ?? "",
+  EndAt: data.end ?? data.end_at ?? data.EndAt ?? "",
 });
-
 
 /**
  * ✅ ดึงช่วงเวลาเรียนทั้งหมดของรายวิชา
  * GET /subjects/:subjectId/times
  */
 export const getStudyTimesBySubject = async (
-  subjectId: string,
+  subjectId: string
 ): Promise<SubjectStudyTimeInterface[]> => {
-  if (!subjectId) {
-    throw new Error("subjectId is required");
-  }
+  if (!subjectId) throw new Error("subjectId is required");
+
   try {
-    const response = await axios.get(`${apiUrl}/subjects/${subjectId}/times/`);
-    console.log("api study times:", response);
-    return (Array.isArray(response.data) ? response.data : []).map(mapStudyTime);
+    const response = await axios.get<StudyTimeAPI[]>(
+      `${apiUrl}/subjects/${subjectId}/times/`
+    );
+    return (Array.isArray(response.data) ? response.data : []).map(
+      mapStudyTime
+    );
   } catch (error) {
     console.error("Error fetching study times:", error);
     throw error;
@@ -37,15 +54,15 @@ export const getStudyTimesBySubject = async (
  */
 export const getStudyTimeOne = async (
   subjectId: string,
-  timeId: number | string,
+  timeId: number | string
 ): Promise<SubjectStudyTimeInterface> => {
   if (!subjectId) throw new Error("subjectId is required");
   if (timeId === null || timeId === undefined)
     throw new Error("timeId is required");
 
   try {
-    const response = await axios.get(
-      `${apiUrl}/subjects/${subjectId}/times/${timeId}`,
+    const response = await axios.get<StudyTimeAPI>(
+      `${apiUrl}/subjects/${subjectId}/times/${timeId}`
     );
     return mapStudyTime(response.data);
   } catch (error) {
@@ -61,13 +78,13 @@ export const getStudyTimeOne = async (
  */
 export const addStudyTime = async (
   subjectId: string,
-  data: { start: string; end: string },
+  data: { start: string; end: string }
 ): Promise<SubjectStudyTimeInterface> => {
   if (!subjectId) throw new Error("subjectId is required");
   try {
     const response = await axios.post(
       `${apiUrl}/subjects/${subjectId}/times/`,
-      data,
+      data
     );
     return mapStudyTime(response.data);
   } catch (error) {
@@ -83,7 +100,7 @@ export const addStudyTime = async (
 export const updateStudyTime = async (
   subjectId: string,
   timeId: number | string,
-  data: Partial<{ start: string; end: string }>,
+  data: Partial<{ start: string; end: string }>
 ): Promise<SubjectStudyTimeInterface> => {
   if (!subjectId) throw new Error("subjectId is required");
   if (timeId === null || timeId === undefined)
@@ -92,7 +109,7 @@ export const updateStudyTime = async (
   try {
     const response = await axios.put(
       `${apiUrl}/subjects/${subjectId}/times/${timeId}`,
-      data,
+      data
     );
     return mapStudyTime(response.data);
   } catch (error) {
@@ -107,7 +124,7 @@ export const updateStudyTime = async (
  */
 export const deleteStudyTime = async (
   subjectId: string,
-  timeId: number | string,
+  timeId: number | string
 ): Promise<void> => {
   if (!subjectId) throw new Error("subjectId is required");
   if (timeId === null || timeId === undefined)

@@ -16,7 +16,10 @@ import { PlusOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
 import { type SubjectInterface } from "../../../../../interfaces/Subjects";
 import { type SubjectStudyTimeInterface } from "../../../../../interfaces/SubjectsStudyTime";
-import { createSubject, getSubjectAll } from "../../../../../services/https/subject/subjects";
+import {
+  createSubject,
+  getSubjectAll,
+} from "../../../../../services/https/subject/subjects";
 import { addStudyTime } from "../../../../../services/https/subjectstudytime/subjectsstudytime";
 import { getFacultyAll } from "../../../../../services/https/faculty/faculty";
 import { getMajorAll } from "../../../../../services/https/major/major";
@@ -29,6 +32,77 @@ const { Option } = Select;
 // -----------------------------
 type Faculty = { id: string; name: string };
 type Major = { id: string; name: string; facultyId?: string };
+
+// ----- API response types (รองรับทั้ง snake_case / camelCase / PascalCase) -----
+type FacultyAPI = {
+  faculty_id?: string;
+  facultyId?: string;
+  FacultyID?: string;
+  id?: string;
+
+  faculty_name?: string;
+  facultyName?: string;
+  FacultyName?: string;
+  name?: string;
+};
+
+type MajorAPI = {
+  major_id?: string;
+  majorId?: string;
+  MajorID?: string;
+  id?: string;
+
+  major_name?: string;
+  majorName?: string;
+  MajorName?: string;
+  name?: string;
+
+  faculty_id?: string;
+  facultyId?: string;
+  FacultyID?: string;
+};
+
+type SubjectTimeAPI = {
+  start?: string;
+  start_time?: string;
+  StartAt?: string;
+  end?: string;
+  end_time?: string;
+  EndAt?: string;
+};
+
+type SubjectAPI = {
+  subject_id?: string;
+  subjectId?: string;
+  SubjectID?: string;
+  id?: string;
+
+  subject_name?: string;
+  subjectName?: string;
+  SubjectName?: string;
+  name?: string;
+
+  credit?: number;
+
+  study_times?: SubjectTimeAPI[];
+  schedule?: SubjectTimeAPI[];
+
+  major_id?: string;
+  majorId?: string;
+  MajorID?: string;
+
+  major_name?: string;
+  majorName?: string;
+  MajorName?: string;
+
+  faculty_id?: string;
+  facultyId?: string;
+  FacultyID?: string;
+
+  faculty_name?: string;
+  facultyName?: string;
+  FacultyName?: string;
+};
 
 interface SubjectRow extends SubjectInterface {
   schedule: SubjectStudyTimeInterface[];
@@ -92,10 +166,13 @@ const ADD: React.FC = () => {
     try {
       setLoadingFaculties(true);
       const data = await getFacultyAll();
-      const mapped: Faculty[] = (Array.isArray(data) ? data : []).map((f) => ({
-        id: f.faculty_id ?? f.facultyId ?? f.FacultyID ?? f.id,
-        name: f.faculty_name ?? f.facultyName ?? f.FacultyName ?? f.name,
+
+      const arr = (Array.isArray(data) ? data : []) as FacultyAPI[];
+      const mapped: Faculty[] = arr.map((f) => ({
+        id: f.faculty_id ?? f.facultyId ?? f.FacultyID ?? f.id ?? "",
+        name: f.faculty_name ?? f.facultyName ?? f.FacultyName ?? f.name ?? "",
       }));
+
       setFaculties(mapped);
     } catch {
       message.error("โหลดรายชื่อคณะไม่สำเร็จ");
@@ -108,11 +185,14 @@ const ADD: React.FC = () => {
     try {
       setLoadingMajors(true);
       const data = await getMajorAll();
-      const mapped: Major[] = (Array.isArray(data) ? data : []).map((m) => ({
-        id: m.major_id ?? m.majorId ?? m.MajorID ?? m.id,
-        name: m.major_name ?? m.majorName ?? m.MajorName ?? m.name,
-        facultyId: m.faculty_id ?? m.facultyId ?? m.FacultyID,
+
+      const arr = (Array.isArray(data) ? data : []) as MajorAPI[];
+      const mapped: Major[] = arr.map((m) => ({
+        id: m.major_id ?? m.majorId ?? m.MajorID ?? m.id ?? "",
+        name: m.major_name ?? m.majorName ?? m.MajorName ?? m.name ?? "",
+        facultyId: m.faculty_id ?? m.facultyId ?? m.FacultyID ?? "",
       }));
+
       setMajors(mapped);
     } catch {
       message.error("โหลดรายชื่อสาขาไม่สำเร็จ");
@@ -125,47 +205,44 @@ const ADD: React.FC = () => {
     try {
       const data = await getSubjectAll();
 
-      // สมมติ backend คืน snake_case: subject_id, subject_name, credit, major_id, faculty_id, study_times, major_name, faculty_name
-      const mapped: SubjectRow[] = (Array.isArray(data) ? data : []).map(
-        (s) => {
-          const schedule: SubjectStudyTimeInterface[] = (
-            s.study_times ??
-            s.schedule ??
-            []
-          ).map(
-            (range: {
-              start?: string;
-              start_time?: string;
-              StartAt?: string;
-              end?: string;
-              end_time?: string;
-              EndAt?: string;
-            }) => {
-              const start = range.start || range.start_time || range.StartAt;
-              const end = range.end || range.end_time || range.EndAt;
-              return { StartAt: start, EndAt: end };
-            }
-          );
-          const formattedSchedule = schedule.map((t) => {
-            const start = dayjs(t.StartAt, "YYYY-MM-DD HH:mm");
-            const end = dayjs(t.EndAt, "YYYY-MM-DD HH:mm");
-            return `${start.format("dddd HH:mm")} - ${end.format(
-              "dddd HH:mm"
-            )}`;
-          });
-          return {
-            SubjectID: s.subject_id ?? s.subjectId ?? s.SubjectID ?? s.id,
-            SubjectName:
-              s.subject_name ?? s.subjectName ?? s.SubjectName ?? s.name,
-            schedule,
-            formattedSchedule,
-            FacultyID: s.faculty_id ?? s.facultyId ?? s.FacultyID,
-            FacultyName: s.faculty_name ?? s.facultyName ?? s.FacultyName,
-            MajorID: s.major_id ?? s.majorId ?? s.MajorID,
-            MajorName: s.major_name ?? s.majorName ?? s.MajorName,
-          };
-        }
-      );
+      const arr = (Array.isArray(data) ? data : []) as SubjectAPI[];
+      const mapped: SubjectRow[] = arr.map((s) => {
+        const scheduleApi: SubjectTimeAPI[] = (s.study_times ??
+          s.schedule ??
+          []) as SubjectTimeAPI[];
+
+        const schedule: SubjectStudyTimeInterface[] = scheduleApi.map(
+          (range) => {
+            const start =
+              range.start ?? range.start_time ?? range.StartAt ?? "";
+            const end = range.end ?? range.end_time ?? range.EndAt ?? "";
+            return { StartAt: start, EndAt: end };
+          }
+        );
+
+        const formattedSchedule = schedule.map((t) => {
+          const st = dayjs(t.StartAt, "YYYY-MM-DD HH:mm");
+          const en = dayjs(t.EndAt, "YYYY-MM-DD HH:mm");
+          return `${st.format("dddd HH:mm")} - ${en.format("dddd HH:mm")}`;
+        });
+
+        return {
+          // ฟิลด์ตาม SubjectInterface
+          SubjectID: s.subject_id ?? s.subjectId ?? s.SubjectID ?? s.id ?? "",
+          SubjectName:
+            s.subject_name ?? s.subjectName ?? s.SubjectName ?? s.name ?? "",
+          Credit: Number(s.credit ?? 0),
+
+          // เพิ่มเติมใน SubjectRow
+          schedule,
+          formattedSchedule,
+
+          FacultyID: s.faculty_id ?? s.facultyId ?? s.FacultyID ?? "",
+          FacultyName: s.faculty_name ?? s.facultyName ?? s.FacultyName,
+          MajorID: s.major_id ?? s.majorId ?? s.MajorID ?? "",
+          MajorName: s.major_name ?? s.majorName ?? s.MajorName,
+        };
+      });
 
       setSubjects(mapped);
     } catch {
@@ -195,27 +272,24 @@ const ADD: React.FC = () => {
   // -----------------------------
   // Submit
   // -----------------------------
+  // ✅ ใช้ SubjectInterface (PascalCase) ตอนเรียกบริการ
   const onFinish = async (values: FormValues) => {
     try {
-      // 1) สร้างวิชา
       const created = await createSubject({
         SubjectID: values.SubjectID,
         SubjectName: values.SubjectName,
-        Credit: values.Credit,
+        Credit: Number(values.Credit), // กันกรณีถูกเก็บเป็น string
         MajorID: values.MajorID,
         FacultyID: values.FacultyID,
       });
+
       const subjectId =
-        (
-          created as SubjectInterface & {
-            subject_id?: string;
-          }
-        ).subject_id ??
+        (created as SubjectInterface & { subject_id?: string }).subject_id ??
         created.SubjectID ??
         values.SubjectID;
+
       if (!subjectId) throw new Error("Missing subject_id from response");
 
-      // 2) สร้างช่วงเวลาเรียน
       await Promise.all(
         (values.schedule || []).map((range) =>
           addStudyTime(String(subjectId), {
@@ -287,32 +361,31 @@ const ADD: React.FC = () => {
               />
             </Form.Item>
 
-            {/* หน่วยกิต */}
             <Form.Item
-              label="หน่วยกิจ"
+              label="หน่วยกิต"
               name="Credit"
               rules={[
-                { required: true, message: "กรุณากรอกหน่วยกิจ" },
+                { required: true, message: "กรุณากรอกหน่วยกิต" },
                 {
-                  validator: (_, v) =>
-                    v && Number(v) >= 1 && Number(v) <= 5
-                      ? Promise.resolve()
-                      : Promise.reject("หน่วยกิจต้องเป็นตัวเลข 1–5"),
+                  type: "number",
+                  min: 1,
+                  max: 5,
+                  message: "หน่วยกิตต้องเป็นตัวเลข 1–5",
+                  transform: (value) => Number(value), // แปลงจาก string -> number
                 },
               ]}
+              extra={
+                <Typography.Text type="danger">
+                  หมายเหตุ: หน่วยกิตต้องเป็นตัวเลขระหว่าง 1 ถึง 5
+                </Typography.Text>
+              }
               style={{ width: "100%" }}
             >
-              <>
-                <Typography.Text type="danger">
-                  หมายเหตุ: หน่วยกิจต้องเป็นตัวเลขระหว่าง 1 ถึง 5
-                </Typography.Text>
-                <div style={{ height: 5 }} aria-hidden="true" />
-                <Input
-                  placeholder="เช่น 3"
-                  inputMode="numeric"
-                  style={{ height: 44, maxWidth: 300, fontSize: 15 }}
-                />
-              </>
+              <Input
+                placeholder="เช่น 3"
+                inputMode="numeric"
+                style={{ height: 44, maxWidth: 300, fontSize: 15 }}
+              />
             </Form.Item>
 
             {/* เวลาเรียน (แก้ name ให้ถูก + เก็บเป็นคู่ [start, end]) */}
@@ -453,7 +526,7 @@ const ADD: React.FC = () => {
             className="custom-table-header"
             columns={[
               { title: "ชื่อรายวิชา", dataIndex: "SubjectName" },
-              { title: "หน่วยกิจ", dataIndex: "Credit" },
+              { title: "หน่วยกิต", dataIndex: "Credit" },
               {
                 title: "เวลาเรียน",
                 dataIndex: "formattedSchedule",
