@@ -19,7 +19,8 @@ import (
 	"reg_system/controller/major"
 	"reg_system/controller/position"
 	"reg_system/controller/status"
-
+	"reg_system/controller/subject"
+    "reg_system/controller/subjectstudytime"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 )
@@ -124,6 +125,30 @@ func main() {
 		bookGroup.GET("/:filename" , curriculum.ShowBookFile)
 		bookGroup.POST("/" , curriculum.UploadBookFile)
 	}
+
+	//---------------------------------------------------------
+	// Subject
+	subjectGroup := r.Group("/subjects");{
+		subjectGroup.GET("/:id", subjects.GetSubjectID)
+		subjectGroup.POST("/", subjects.CreateSubject)
+		subjectGroup.GET("/", subjects.GetSubjectAll)
+		subjectGroup.PUT("/:id", subjects.UpdateSubject)
+		subjectGroup.DELETE("/:id", subjects.DeleteSubject)
+	}
+	//---------------------------------------------------------
+
+	//---------------------------------------------------------
+	// Subject Study Times (ของแต่ละรายวิชา)
+	// เส้นทางอยู่ใต้ /subjects/:subjectId/times เหมือน REST style
+	studyTimeGroup := r.Group("/subjects/:subjectId/times");{
+		studyTimeGroup.GET("/", subjectstudytime.GetBySubject)      // ลิสต์ช่วงเวลาทั้งหมดของวิชานั้น
+		studyTimeGroup.GET("/:timeId", subjectstudytime.GetOne)     // ดูช่วงเวลา 1 รายการ
+		studyTimeGroup.POST("/", subjectstudytime.Create)           // เพิ่มช่วงเวลา 1 รายการ
+		studyTimeGroup.PUT("/:timeId", subjectstudytime.Update)     // แก้ช่วงเวลา 1 รายการ
+		studyTimeGroup.DELETE("/:timeId", subjectstudytime.Delete)  // ลบช่วงเวลา 1 รายการ
+	}
+	//---------------------------------------------------------
+
 
 	
 	r.GET("/genders", gender.GetGenderAll)

@@ -177,7 +177,7 @@ const ADD: React.FC = () => {
 
             <Form.Item
               label="เวลาเรียน"
-              name="schedule"
+              name={name}
               rules={[{ required: true, message: "กรุณากรอกเวลาเรียน" }]}
               style={{ width: "100%" }}
             >

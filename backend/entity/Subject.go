@@ -1,11 +1,15 @@
 package entity
-import (
-	"time"
-)
+
+// ตารางวิชา
 type Subjects struct {
-	SubjectID   string `json:"subject_id" gorm:"primaryKey"`
-	SubjectName string `json:"subject_name"`
-	Credit     int    `json:"credit"`
-	Major   *Majors `gorm:"foreignKey:MajorID;references:MajorID"` // ระบุความสัมพันธ์ 1--1 [Majors]
-	StudyTime   time.Time  `json:"study_time" gorm:"type:datetime"` // MySQL/MariaDB
+	SubjectID   string   `json:"subject_id" gorm:"primaryKey"`
+	SubjectName string   `json:"subject_name"`
+	Credit      int      `json:"credit"`
+
+	// ความสัมพันธ์กับ Major
+	MajorID string  `json:"major_id"`
+	Major   *Majors `gorm:"foreignKey:MajorID;references:MajorID"`
+
+	// ความสัมพันธ์กับ StudyTime (One-to-Many)
+	StudyTimes []SubjectStudyTime `json:"study_times" gorm:"foreignKey:SubjectID"`
 }

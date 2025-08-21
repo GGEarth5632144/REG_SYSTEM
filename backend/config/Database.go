@@ -43,6 +43,8 @@ func SetupDatabase() {
 
 		&entity.BookPath{},
 		&entity.Curriculum{},
+		&entity.Subjects{},
+		&entity.SubjectStudyTime{},
 
 	)
 
