@@ -6,14 +6,14 @@ import { type AdminInterface } from '../../../interfaces/Admin'
 
 /* ---------- page components ---------- */
 import MainPage from './menu/mainpage/mainpage';
-import RegisterPage from './menu/register/register';
+//import RegisterPage from './menu/register/register';
 import CoursePage from './menu/course/course';
 import TimeTablePage from './menu/timetable/timetable';
 import GradePage from './menu/grade/grade';
 import ScorePage from './menu/score/score';
 import PaymentPage from './menu/payment/payment';
-import ProfilePage from './menu/profile/profile';
-import TeacherPage from './menu/teacher/teacher';
+//import ProfilePage from './menu/profile/profile';
+//import TeacherPage from './menu/teacher/teacher';
 import ReportPage from './menu/report/report';
 import GraduatePage from './menu/graduate/graduate';
 import CurriculumPage from './menu/curriculum/curriculum';
@@ -79,7 +79,7 @@ const AdminDashboardpage: React.FC = () => {
   const renderContent = () => {
     switch (activePage) {
       case 'ลงทะเบียนเรียน':
-        return <RegisterPage />;
+        return //<RegisterPage />;
       case 'วิชาที่เปิดสอน':
         return <CoursePage />;
       case 'ตารางเรียน':
@@ -91,9 +91,9 @@ const AdminDashboardpage: React.FC = () => {
       case 'ใบแจ้งยอดชำระ':
         return <PaymentPage />;
       case 'ระเบียนประวัติ':
-        return <ProfilePage />;
+        return //<ProfilePage />;
       case 'อาจารย์':
-        return <TeacherPage />;
+        return //<TeacherPage />;
       case 'คำร้อง':
         return <ReportPage />;
       case 'แจ้งจบการศึกษา':

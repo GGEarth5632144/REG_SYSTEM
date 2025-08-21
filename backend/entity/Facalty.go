@@ -8,5 +8,6 @@ type Faculty struct {
 	Teachers []Teachers `gorm:"foreignKey:FacultyID" json:"-"` // ระบุความสัมพันธ์ 1--many [Teachers]
 	Majors   []Majors   `gorm:"foreignKey:FacultyID" json:"-"`   // ระบุความสัมพันธ์ 1--many [Majors]
 	Curriculum []Curriculum `gorm:"foreignKey:FacultyID" json:"-"`   // ระบุความสัมพันธ์ 1--many [Curriculum]
+	Subjects []Subjects `gorm:"foreignKey:FacultyID" json:"-"`   // ระบุความสัมพันธ์ 1--many [Subjects]
 }
 

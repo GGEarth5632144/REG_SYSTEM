@@ -8,4 +8,7 @@ export interface SubjectInterface {
     MajorID?: string;           // รหัสสาขาวิชา
     MajorName?: string;         // ชื่อสาขา
 
+    FacultyID?: string;           // รหัสสาขาวิชา
+    FacultyName?: string;         // ชื่อสาขา
+
 }
