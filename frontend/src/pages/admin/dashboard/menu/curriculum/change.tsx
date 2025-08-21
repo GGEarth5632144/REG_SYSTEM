@@ -47,6 +47,11 @@ const subjects = [
   { id: "sub-4", name: "Physics" },
 ];
 
+const subjectMap = subjects.reduce((acc, cur) => {
+  acc[cur.id] = cur.name;
+  return acc;
+}, {} as Record<string, string>);
+
 const originData: DataType[] = [
   {
     key: "1",
@@ -78,44 +83,49 @@ const originData: DataType[] = [
 ];
 
 interface EditableCellProps extends React.HTMLAttributes<HTMLElement> {
+  /** props ที่ onCell จะส่งให้เซลล์ */
+  record: DataType;
   editing: boolean;
   dataIndex: keyof DataType;
-  columnTitle: React.ReactNode;
+  title: React.ReactNode; // ใช้ชื่อ title ให้ตรงกับตัวอย่างของ antd
   inputType: "number" | "text" | "select" | "multiselect";
 }
 
 const EditableCell: React.FC<EditableCellProps> = ({
   editing,
   dataIndex,
-  columnTitle,
+  title,
   inputType,
   children,
   ...restProps
 }) => {
   let inputNode: React.ReactNode;
   if (inputType === "number") {
-    inputNode = <InputNumber />;
-  } else if (inputType === "select") {
+    inputNode = <InputNumber style={{ width: "100%" }} />;
+  } else if (inputNode === "text") {
+    inputNode = <Input />;
+  }
+
+  if (inputType === "select") {
     inputNode = (
-      <Select>
-        {faculties.map((fac) => (
-          <Select.Option key={fac.id} value={fac.id}>
-            {fac.name}
-          </Select.Option>
-        ))}
-      </Select>
+      <Select
+        options={faculties.map((f) => ({ label: f.name, value: f.id }))}
+        showSearch
+        optionFilterProp="label"
+        allowClear
+      />
     );
   } else if (inputType === "multiselect") {
     inputNode = (
-      <Select mode="multiple">
-        {subjects.map((sub) => (
-          <Select.Option key={sub.id} value={sub.id}>
-            {sub.name}
-          </Select.Option>
-        ))}
-      </Select>
+      <Select
+        mode="multiple"
+        options={subjects.map((s) => ({ label: s.name, value: s.id }))}
+        showSearch
+        optionFilterProp="label"
+        allowClear
+      />
     );
-  } else {
+  } else if (!inputNode) {
     inputNode = <Input />;
   }
 
@@ -125,7 +135,7 @@ const EditableCell: React.FC<EditableCellProps> = ({
         <Form.Item
           name={dataIndex}
           style={{ margin: 0 }}
-          rules={[{ required: true, message: `Please Input ${columnTitle}!` }]}
+          rules={[{ required: true, message: `Please Input ${title}!` }]}
         >
           {inputNode}
         </Form.Item>
@@ -139,7 +149,7 @@ const EditableCell: React.FC<EditableCellProps> = ({
 const CHANGE: React.FC = () => {
   const [form] = Form.useForm();
   const [data, setData] = useState<DataType[]>(originData);
-  const [editingKey, setEditingKey] = useState("");
+  const [editingKey, setEditingKey] = useState<React.Key>("");
   const [searchText, setSearchText] = useState("");
 
   const isEditing = (record: DataType) => record.key === editingKey;
@@ -163,17 +173,17 @@ const CHANGE: React.FC = () => {
 
   const save = async (key: React.Key) => {
     try {
-      const row = (await form.validateFields()) as DataType;
+      const row = (await form.validateFields()) as Partial<DataType>;
       const newData = [...data];
       const index = newData.findIndex((item) => key === item.key);
 
       if (index > -1) {
         const item = newData[index];
-        newData.splice(index, 1, { ...item, ...row });
+        newData.splice(index, 1, { ...item, ...row } as DataType);
         setData(newData);
         setEditingKey("");
       } else {
-        newData.push(row);
+        newData.push({ key: String(key), ...(row as DataType) });
         setData(newData);
         setEditingKey("");
       }
@@ -190,7 +200,7 @@ const CHANGE: React.FC = () => {
   const filteredData = data.filter(
     (item) =>
       item.name.toLowerCase().includes(searchText.toLowerCase()) ||
-      facultyMap[item.facultyId]
+      (facultyMap[item.facultyId] || "")
         .toLowerCase()
         .includes(searchText.toLowerCase())
   );
@@ -226,7 +236,8 @@ const CHANGE: React.FC = () => {
       dataIndex: "subjectIds",
       width: "20%",
       editable: true,
-      render: (subjectIds: string[]) => subjectIds.join(", "),
+      render: (subjectIds: string[]) =>
+        subjectIds.map((id) => subjectMap[id] || id).join(", "),
     },
     {
       title: "Curriculum Book",
@@ -283,26 +294,27 @@ const CHANGE: React.FC = () => {
     },
   ];
 
+  // ✅ แก้ชนิด onCell ให้ตรงกับ antd (cast เป็น HTMLAttributes & EditableCellProps)
   const mergedColumns: ColumnsType<DataType> = columns.map((col) => {
-    if (!col.editable) {
-      return col;
-    }
+    if (!col.editable) return col;
+
     return {
       ...col,
-      onCell: (record: DataType) => ({
-        record,
-        inputType:
-          col.dataIndex === "credit" || col.dataIndex === "startYear"
-            ? "number"
-            : col.dataIndex === "facultyId"
-            ? "select"
-            : col.dataIndex === "subjectIds"
-            ? "multiselect"
-            : "text",
-        dataIndex: col.dataIndex,
-        columnTitle: col.title,
-        editing: isEditing(record),
-      }),
+      onCell: (record: DataType) =>
+        ({
+          record,
+          inputType:
+            col.dataIndex === "credit" || col.dataIndex === "startYear"
+              ? "number"
+              : col.dataIndex === "facultyId"
+              ? "select"
+              : col.dataIndex === "subjectIds"
+              ? "multiselect"
+              : "text",
+          dataIndex: col.dataIndex as keyof DataType,
+          title: col.title as React.ReactNode,
+          editing: isEditing(record),
+        } as React.HTMLAttributes<HTMLElement> & EditableCellProps),
     };
   });
 
@@ -351,11 +363,10 @@ const CHANGE: React.FC = () => {
             onChange={(e) => setSearchText(e.target.value)}
             style={{ marginBottom: 16, width: 300, height: 40, fontSize: 16 }}
             prefix={<SearchOutlined />}
+            allowClear
           />
           <Table<DataType>
-            components={{
-              body: { cell: EditableCell },
-            }}
+            components={{ body: { cell: EditableCell } }}
             bordered
             dataSource={filteredData}
             columns={mergedColumns}
