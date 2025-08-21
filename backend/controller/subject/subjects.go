@@ -42,9 +42,9 @@ func CreateSubject(c *gin.Context) {
 	})
 }
 
-// GET /subjects/:id
+// GET /subjects/:subjectId
 func GetSubjectID(c *gin.Context) {
-	id := c.Param("id")
+	id := c.Param("subjectId")
 	db := config.DB()
 	var sub entity.Subjects
 
@@ -99,7 +99,7 @@ func GetSubjectAll(c *gin.Context) {
 	c.JSON(http.StatusOK, out)
 }
 
-// PUT /subjects/:id
+// PUT /subjects/:subjectId
 type SubjectUpdateReq struct {
 	SubjectName *string `json:"subject_name,omitempty"`
 	Credit      *int    `json:"credit,omitempty"`
@@ -107,7 +107,7 @@ type SubjectUpdateReq struct {
 }
 
 func UpdateSubject(c *gin.Context) {
-	id := c.Param("id")
+	id := c.Param("subjectId")
 	db := config.DB()
 
 	var req SubjectUpdateReq
@@ -143,9 +143,9 @@ func UpdateSubject(c *gin.Context) {
 	c.JSON(http.StatusOK, sub)
 }
 
-// DELETE /subjects/:id
+// DELETE /subjects/:subjectId
 func DeleteSubject(c *gin.Context) {
-	id := c.Param("id")
+	id := c.Param("subjectId")
 	db := config.DB()
 
 	// ถ้า entity ตั้ง constraint:OnDelete:CASCADE ไว้ที่ StudyTimes
