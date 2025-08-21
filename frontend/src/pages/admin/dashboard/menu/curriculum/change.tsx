@@ -82,7 +82,8 @@ const originData: DataType[] = [
   },
 ];
 
-interface EditableCellProps extends React.HTMLAttributes<HTMLElement> {
+interface EditableCellProps
+  extends Omit<React.HTMLAttributes<HTMLElement>, "title"> {
   /** props ที่ onCell จะส่งให้เซลล์ */
   record: DataType;
   editing: boolean;
@@ -104,9 +105,7 @@ const EditableCell: React.FC<EditableCellProps> = ({
     inputNode = <InputNumber style={{ width: "100%" }} />;
   } else if (inputNode === "text") {
     inputNode = <Input />;
-  }
-
-  if (inputType === "select") {
+  } else if (inputType === "select") {
     inputNode = (
       <Select
         options={faculties.map((f) => ({ label: f.name, value: f.id }))}
@@ -125,7 +124,7 @@ const EditableCell: React.FC<EditableCellProps> = ({
         allowClear
       />
     );
-  } else if (!inputNode) {
+  } else {
     inputNode = <Input />;
   }
 
@@ -183,7 +182,7 @@ const CHANGE: React.FC = () => {
         setData(newData);
         setEditingKey("");
       } else {
-        newData.push({ key: String(key), ...(row as DataType) });
+        newData.push({ ...(row as Omit<DataType, "key">), key: String(key) });
         setData(newData);
         setEditingKey("");
       }

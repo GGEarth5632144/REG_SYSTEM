@@ -43,9 +43,9 @@ func CreateStudent (c *gin.Context){
 		return
 	}
 	// เพิ่ม รหัสนักศึกษา , เลขบัตรปชช ลงตาราง Users หลังเพิ่มข้อมูลนักเรียนเเล้ว
-	hashPassword , _ := config.HashPassword(student.Citizen_id)
+	hashPassword , _ := config.HashPassword(student.CitizenID)
 	user := &entity.Users{
-		Username: student.Student_id, // ดึงรหัสนักศึกษาออกมา
+		Username: student.StudentID, // ดึงรหัสนักศึกษาออกมา
 		Password: hashPassword,
 		Role: "student", //กำหนด Role
 	}
@@ -55,7 +55,7 @@ func CreateStudent (c *gin.Context){
 	}
 	c.JSON(http.StatusOK , gin.H{
 		"message": "Create student success",
-		"Student_id": student.Student_id,
+		"Student_id": student.StudentID,
 		"FirstName": student.FirstName,
 		"LastName": student.LastName,
 	})
