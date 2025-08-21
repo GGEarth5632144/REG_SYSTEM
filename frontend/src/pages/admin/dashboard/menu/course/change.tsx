@@ -49,7 +49,7 @@ const originData: DataType[] = [
     credit: 3,
     studyTime: [
       { start: "2025-08-10 15:00", end: "2025-08-10 18:00" },
-      // { start: "2025-08-12 09:00", end: "2025-08-12 12:00" },
+      { start: "2025-08-12 09:00", end: "2025-08-12 12:00" },
     ],
     major: "Virtual Reality",
   },
@@ -220,6 +220,7 @@ const CHANGE: React.FC = () => {
         newData.splice(index, 1, {
           ...item,
           ...row, // อัปเดตข้อมูลจาก row ที่แก้ไข
+          studyTime: item.studyTime, // คงค่า studyTime เดิมไว้
         });
         setData(newData); // อัปเดตข้อมูลใน state
         setEditingKey(""); // ปิดการแก้ไข
@@ -341,7 +342,7 @@ const CHANGE: React.FC = () => {
     }
     return {
       ...col,
-      onCell: (record: DataType) => ({
+      onCell: (record: DataType, rowIndex: number) => ({
         record,
         inputType:
           col.dataIndex === "studyTime"
@@ -352,9 +353,11 @@ const CHANGE: React.FC = () => {
             ? "select"
             : "text",
         dataIndex: col.dataIndex,
-        title: col.title,
+        columnTitle: col.title,
         editing: isEditing(record),
         setData, // Pass setData as prop
+        data, // Pass the current data
+        index: rowIndex, // Pass the row index
       }),
     };
   });
@@ -412,7 +415,7 @@ const CHANGE: React.FC = () => {
             bordered
             dataSource={filteredData}
             columns={mergedColumns}
-            rowClassName={(record, index) =>
+            rowClassName={(_record, index) =>
               index % 2 === 0 ? "table-row-light" : "table-row-dark"
             }
             className="custom-table-header"
