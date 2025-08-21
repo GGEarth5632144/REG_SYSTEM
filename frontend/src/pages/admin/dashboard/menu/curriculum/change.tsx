@@ -8,88 +8,80 @@ import {
   Table,
   Typography,
   Select,
-  DatePicker,
 } from "antd";
 import type { ColumnsType, ColumnType } from "antd/es/table";
-import dayjs from "dayjs";
 import { SearchOutlined } from "@ant-design/icons";
+
 const { Content } = Layout;
 
 interface DataType {
   key: string;
-  subjectName: string;
+  name: string;
   credit: number;
-  studyTime: { start: string; end: string }[] | null; // Allow null for studyTime
-  major: string;
+  startYear: number;
+  facultyId: string;
+  subjectIds: string[];
+  syllabusUrl: string;
 }
+
 interface EditableColumnType extends ColumnType<DataType> {
   editable?: boolean;
-  inputType?: "number" | "text" | "time" | "select";
+  inputType?: "number" | "text" | "select" | "multiselect";
 }
+
+const faculties = [
+  { id: "fac-1", name: "Engineering" },
+  { id: "fac-2", name: "Science" },
+  { id: "fac-3", name: "Arts" },
+];
+
+const facultyMap = faculties.reduce((acc, cur) => {
+  acc[cur.id] = cur.name;
+  return acc;
+}, {} as Record<string, string>);
+
+const subjects = [
+  { id: "sub-1", name: "Algorithms" },
+  { id: "sub-2", name: "Databases" },
+  { id: "sub-3", name: "Calculus" },
+  { id: "sub-4", name: "Physics" },
+];
 
 const originData: DataType[] = [
   {
     key: "1",
-    subjectName: "Computer Science",
-    credit: 3,
-    studyTime: [
-      { start: "2025-08-10 15:00", end: "2025-08-10 18:00" },
-      { start: "2025-08-14 09:00", end: "2025-08-14 12:00" },
-    ],
-    major: "Artificial Intelligence",
+    name: "Computer Science",
+    credit: 120,
+    startYear: 2020,
+    facultyId: "fac-1",
+    subjectIds: ["sub-1", "sub-2"],
+    syllabusUrl: "https://example.com/cs.pdf",
   },
   {
     key: "2",
-    subjectName: "Mathematics",
-    credit: 4,
-    studyTime: [
-      { start: "2025-08-10 15:00", end: "2025-08-10 18:00" },
-      { start: "2025-08-12 09:00", end: "2025-08-12 12:00" },
-    ],
-    major: "Computer Science",
+    name: "Mathematics",
+    credit: 110,
+    startYear: 2019,
+    facultyId: "fac-2",
+    subjectIds: ["sub-3"],
+    syllabusUrl: "https://example.com/math.pdf",
   },
   {
     key: "3",
-    subjectName: "Physics",
-    credit: 3,
-    studyTime: [
-      { start: "2025-08-10 15:00", end: "2025-08-10 18:00" },
-      { start: "2025-08-12 09:00", end: "2025-08-12 12:00" },
-    ],
-    major: "Virtual Reality",
-  },
-  {
-    key: "4",
-    subjectName: "Chemistry",
-    credit: 4,
-    studyTime: [
-      { start: "2025-08-10 15:00", end: "2025-08-10 18:00" },
-      { start: "2025-08-12 09:00", end: "2025-08-12 12:00" },
-    ],
-    major: "Physics",
-  },
-  {
-    key: "5",
-    subjectName: "English Literature",
-    credit: 2,
-    studyTime: [
-      { start: "2025-08-10 15:00", end: "2025-08-10 18:00" },
-      { start: "2025-08-12 09:00", end: "2025-08-12 12:00" },
-    ],
-    major: "fac-3",
+    name: "Physics",
+    credit: 130,
+    startYear: 2021,
+    facultyId: "fac-3",
+    subjectIds: ["sub-4"],
+    syllabusUrl: "https://example.com/physics.pdf",
   },
 ];
 
-interface EditableCellProps
-  extends Omit<React.HTMLAttributes<HTMLElement>, "title"> {
+interface EditableCellProps extends React.HTMLAttributes<HTMLElement> {
   editing: boolean;
-  dataIndex: string;
+  dataIndex: keyof DataType;
   columnTitle: React.ReactNode;
-  inputType: "number" | "text" | "time" | "select";
-  record: DataType;
-  index: number;
-  setData: React.Dispatch<React.SetStateAction<DataType[]>>;
-  data: DataType[];
+  inputType: "number" | "text" | "select" | "multiselect";
 }
 
 const EditableCell: React.FC<EditableCellProps> = ({
@@ -97,82 +89,35 @@ const EditableCell: React.FC<EditableCellProps> = ({
   dataIndex,
   columnTitle,
   inputType,
-  record,
-  index,
   children,
-  setData,
-  data,
   ...restProps
 }) => {
-  const inputNode =
-    inputType === "number" ? (
-      <InputNumber min={1} max={5} style={{ width: 50 }} />
-    ) : inputType === "time" ? (
-      <div>
-        {/* Loop through all studyTime sessions and create a RangePicker for each session */}
-        {record.studyTime?.map((session, sessionIndex) => (
-          <div key={sessionIndex}>
-            <DatePicker.RangePicker
-              format="YYYY-MM-DD HH:mm"
-              showTime
-              value={
-                session ? [dayjs(session.start), dayjs(session.end)] : null
-              }
-              onChange={(value) => {
-                if (value && value[0] && value[1]) {
-                  const start = value[0];
-                  const end = value[1];
-
-                  // Check if both dates are valid
-                  if (start.isValid() && end.isValid()) {
-                    const newData = [...data]; // Copy the existing data
-
-                    // Ensure the specific session is updated
-                    if (newData[index].studyTime) {
-                      newData[index].studyTime = newData[index].studyTime.map(
-                        (existingSession, sessionIdx) => {
-                          if (sessionIdx === sessionIndex) {
-                            // Update the selected session with the new time
-                            return {
-                              start: start.format("YYYY-MM-DD HH:mm"),
-                              end: end.format("YYYY-MM-DD HH:mm"),
-                            };
-                          }
-                          return existingSession; // Keep the other sessions intact
-                        }
-                      );
-                    }
-
-                    setData(newData); // Update the state with the modified data
-                  } else {
-                    console.error("Invalid date range selected.");
-                  }
-                }
-              }}
-            />
-          </div>
+  let inputNode: React.ReactNode;
+  if (inputType === "number") {
+    inputNode = <InputNumber />;
+  } else if (inputType === "select") {
+    inputNode = (
+      <Select>
+        {faculties.map((fac) => (
+          <Select.Option key={fac.id} value={fac.id}>
+            {fac.name}
+          </Select.Option>
         ))}
-      </div>
-    ) : inputType === "select" ? (
-      <Select
-        defaultValue={record.major}
-        style={{ width: 150 }}
-        onChange={(value) => {
-          const newData = [...data];
-          newData[index].major = value;
-          setData(newData);
-        }}
-      >
-        <Select.Option value="Information Technology">
-          Information Technology
-        </Select.Option>
-        <Select.Option value="Engineering">Engineering</Select.Option>
-        <Select.Option value="Science">Science</Select.Option>
-        <Select.Option value="Arts">Arts</Select.Option>
       </Select>
-    ) : (
-      <Input />
     );
+  } else if (inputType === "multiselect") {
+    inputNode = (
+      <Select mode="multiple">
+        {subjects.map((sub) => (
+          <Select.Option key={sub.id} value={sub.id}>
+            {sub.name}
+          </Select.Option>
+        ))}
+      </Select>
+    );
+  } else {
+    inputNode = <Input />;
+  }
 
   return (
     <td {...restProps}>
@@ -195,16 +140,18 @@ const CHANGE: React.FC = () => {
   const [form] = Form.useForm();
   const [data, setData] = useState<DataType[]>(originData);
   const [editingKey, setEditingKey] = useState("");
-  const [searchText, setSearchText] = useState(""); // เพิ่ม state สำหรับค้นหา
+  const [searchText, setSearchText] = useState("");
 
   const isEditing = (record: DataType) => record.key === editingKey;
 
   const edit = (record: Partial<DataType> & { key: React.Key }) => {
     form.setFieldsValue({
-      subjectName: record.subjectName,
-      credit: record.credit,
-      studyTime: record.studyTime,
-      major: record.major,
+      name: "",
+      credit: 0,
+      startYear: 0,
+      facultyId: "",
+      subjectIds: [],
+      syllabusUrl: "",
       ...record,
     });
     setEditingKey(record.key);
@@ -217,18 +164,14 @@ const CHANGE: React.FC = () => {
   const save = async (key: React.Key) => {
     try {
       const row = (await form.validateFields()) as DataType;
-      const newData = [...data]; // ใช้ข้อมูลจาก state (data)
+      const newData = [...data];
       const index = newData.findIndex((item) => key === item.key);
 
       if (index > -1) {
         const item = newData[index];
-        newData.splice(index, 1, {
-          ...item,
-          ...row, // อัปเดตข้อมูลจาก row ที่แก้ไข
-          studyTime: item.studyTime, // คงค่า studyTime เดิมไว้
-        });
-        setData(newData); // อัปเดตข้อมูลใน state
-        setEditingKey(""); // ปิดการแก้ไข
+        newData.splice(index, 1, { ...item, ...row });
+        setData(newData);
+        setEditingKey("");
       } else {
         newData.push(row);
         setData(newData);
@@ -244,64 +187,63 @@ const CHANGE: React.FC = () => {
     setData(newData);
   };
 
-  // กรองข้อมูลตาม searchText
   const filteredData = data.filter(
     (item) =>
-      item.subjectName.toLowerCase().includes(searchText.toLowerCase()) ||
-      item.major.toLowerCase().includes(searchText.toLowerCase())
+      item.name.toLowerCase().includes(searchText.toLowerCase()) ||
+      facultyMap[item.facultyId]
+        .toLowerCase()
+        .includes(searchText.toLowerCase())
   );
 
   const columns: EditableColumnType[] = [
     {
-      title: "Subject Name",
-      dataIndex: "subjectName",
+      title: "Curriculum Name",
+      dataIndex: "name",
       width: "20%",
       editable: true,
     },
     {
-      title: "Credit",
+      title: "Total Credit",
       dataIndex: "credit",
       width: "10%",
       editable: true,
     },
     {
-      title: "Study Time",
-      dataIndex: "studyTime",
-      width: "20%",
+      title: "Curriculum Start Year",
+      dataIndex: "startYear",
+      width: "15%",
       editable: true,
-      render: (studyTime: { start: string; end: string }[] | null) => {
-        if (studyTime && studyTime.length > 0) {
-          return (
-            <>
-              {studyTime.map((session, index) => {
-                const startDay = dayjs(session.start).format("dddd");
-                const endDay = dayjs(session.end).format("dddd");
-                const startTime = dayjs(session.start).format("HH:mm");
-                const endTime = dayjs(session.end).format("HH:mm");
-
-                return (
-                  <div key={index} style={{ fontSize: "10px" }}>
-                    {`${startDay} ${startTime} - ${endDay} ${endTime}`}
-                  </div>
-                );
-              })}
-            </>
-          );
-        }
-        return <span style={{ fontSize: "10px" }}>Not set</span>;
-      },
     },
     {
-      title: "Major",
-      dataIndex: "major",
+      title: "Faculty",
+      dataIndex: "facultyId",
+      width: "15%",
+      editable: true,
+      render: (facultyId: string) => facultyMap[facultyId] || facultyId,
+    },
+    {
+      title: "Subjects in Curriculum",
+      dataIndex: "subjectIds",
       width: "20%",
       editable: true,
-      inputType: "select",
+      render: (subjectIds: string[]) => subjectIds.join(", "),
+    },
+    {
+      title: "Curriculum Book",
+      dataIndex: "syllabusUrl",
+      width: "10%",
+      editable: true,
+      render: (url: string) =>
+        url ? (
+          <a href={url} target="_blank" rel="noopener noreferrer">
+            View
+          </a>
+        ) : null,
     },
     {
       title: "Edit",
       dataIndex: "edit",
-      width: "10%",
+      width: "5%",
       render: (_: unknown, record: DataType) => {
         const editable = isEditing(record);
         return editable ? (
@@ -329,7 +271,7 @@ const CHANGE: React.FC = () => {
     {
       title: "Delete",
       dataIndex: "delete",
-      width: "10%",
+      width: "5%",
       render: (_: unknown, record: DataType) => (
         <Popconfirm
           title="Sure to delete?"
@@ -341,29 +283,28 @@ const CHANGE: React.FC = () => {
     },
   ];
 
-  const mergedColumns: ColumnsType<DataType> = columns.map((col) => ({
-    ...col,
-    onCell: col.editable
-      ? (record: DataType, rowIndex?: number) =>
-          ({
-            record,
-            inputType:
-              col.dataIndex === "studyTime"
-                ? "time"
-                : col.dataIndex === "credit"
-                ? "number"
-                : col.dataIndex === "major"
-                ? "select"
-                : "text",
-            dataIndex: col.dataIndex,
-            columnTitle: col.title,
-            editing: isEditing(record),
-            setData, // Pass setData as prop
-            data, // Pass the current data
-            index: rowIndex!, // Pass the row index
-          } as EditableCellProps)
-      : undefined,
-  }));
+  const mergedColumns: ColumnsType<DataType> = columns.map((col) => {
+    if (!col.editable) {
+      return col;
+    }
+    return {
+      ...col,
+      onCell: (record: DataType) => ({
+        record,
+        inputType:
+          col.dataIndex === "credit" || col.dataIndex === "startYear"
+            ? "number"
+            : col.dataIndex === "facultyId"
+            ? "select"
+            : col.dataIndex === "subjectIds"
+            ? "multiselect"
+            : "text",
+        dataIndex: col.dataIndex,
+        columnTitle: col.title,
+        editing: isEditing(record),
+      }),
+    };
+  });
 
   return (
     <Layout style={{ minHeight: "100vh" }}>
@@ -405,7 +346,7 @@ const CHANGE: React.FC = () => {
         </style>
         <Form form={form} component={false}>
           <Input
-            placeholder="ค้นหาวิชา หรือ สาขา"
+            placeholder="Search curriculum or faculty"
             value={searchText}
             onChange={(e) => setSearchText(e.target.value)}
             style={{ marginBottom: 16, width: 300, height: 40, fontSize: 16 }}
