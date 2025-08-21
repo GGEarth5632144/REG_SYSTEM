@@ -26,7 +26,7 @@ import (
 // หมายเหตุ:
 // - ถ้าให้ระบบ generate subject_id เอง ให้ปรับ binding ของ SubjectID เป็น omitempty หรือเอาออก
 type SubjectCreateReq struct {
-	SubjectID   string `json:"subject_id"   binding:"required"`            // เปลี่ยนเป็น omitempty ถ้าไม่บังคับกรอก
+	SubjectID   string `json:"subject_id"   binding:"required"` // เปลี่ยนเป็น omitempty ถ้าไม่บังคับกรอก
 	SubjectName string `json:"subject_name" binding:"required"`
 	Credit      int    `json:"credit"       binding:"required,min=1,max=5"`
 	MajorID     string `json:"major_id"     binding:"required"`
@@ -126,7 +126,7 @@ func GetSubjectID(c *gin.Context) {
 	if err := db.
 		Preload("Major").
 		Preload("Faculty").
-		Preload("StudyTimes").
+		Preload("StudyTimes", func(db *gorm.DB) *gorm.DB { return db.Order("start_at ASC") }).
 		First(&sub, "subject_id = ?", id).Error; err != nil {
 
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -164,7 +164,7 @@ func GetSubjectAll(c *gin.Context) {
 	if err := db.
 		Preload("Major").
 		Preload("Faculty").
-		Preload("StudyTimes").
+		Preload("StudyTimes", func(db *gorm.DB) *gorm.DB { return db.Order("start_at ASC") }).
 		Find(&subs).Error; err != nil {
 
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})

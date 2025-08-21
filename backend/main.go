@@ -1,6 +1,7 @@
 package main
 
 import (
+	"net/http"
 	"reg_system/config"
 	"reg_system/test"
 
@@ -162,7 +163,7 @@ func CORSMiddleware() gin.HandlerFunc {
 		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
 		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With")
-		c.Writer.Header().Set("Access-Control-Allow-Method", "GET , POST , PUT , DELETE , OPTIONS")
+		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 
 		// จัดการ preflight request
 		if c.Request.Method == "OPTIONS" {
@@ -175,7 +176,7 @@ func CORSMiddleware() gin.HandlerFunc {
 
 		// หากมี error ระหว่างการทำงาน ตอบกลับเป็น JSON
 		if len(c.Errors) > 0 {
-			c.JSON(-1, gin.H{
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 				"status": "error",
 				"errors": c.Errors.JSON(),
 			})

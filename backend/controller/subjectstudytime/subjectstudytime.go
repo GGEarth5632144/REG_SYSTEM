@@ -17,8 +17,8 @@ import (
    ==========================*/
 
 type StudyTimeCreateReq struct {
-	SubjectID string `json:"subject_id" binding:"required"` // FK ไปยังรายวิชา
-	Start     string `json:"start"     binding:"required"`  // "YYYY-MM-DD HH:mm" หรือ RFC3339
+	SubjectID string `json:"subject_id,omitempty"`         // FK ไปยังรายวิชา (ไม่ต้องส่งก็ได้)
+	Start     string `json:"start"     binding:"required"` // "YYYY-MM-DD HH:mm" หรือ RFC3339
 	End       string `json:"end"       binding:"required"`
 }
 
@@ -59,7 +59,11 @@ func GetBySubject(c *gin.Context) {
 		Find(&times)
 
 	if res.Error != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": res.Error.Error()})
+		if errors.Is(res.Error, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "study times not found"})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": res.Error.Error()})
+		}
 		return
 	}
 	if res.RowsAffected == 0 {
@@ -89,7 +93,8 @@ func GetOne(c *gin.Context) {
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "study time not found"})
-			return
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		}
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
@@ -112,7 +117,11 @@ func Create(c *gin.Context) {
 	if err := db.Model(&entity.Subjects{}).
 		Where("subject_id = ?", subjectID).
 		Count(&count).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "subject not found"})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
 		return
 	}
 	if count == 0 {
@@ -120,15 +129,12 @@ func Create(c *gin.Context) {
 		return
 	}
 
-	// bind body
+	// bind body (ไม่ต้องส่ง subject_id มาใน JSON ก็ได้)
 	var req StudyTimeCreateReq
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-
-	// ใช้ subjectId จาก path เป็นหลัก ป้องกัน mismatch
-	req.SubjectID = subjectID
 
 	loc, _ := time.LoadLocation("Asia/Bangkok")
 	st, err := parseTimeFlexible(req.Start, loc)
@@ -147,13 +153,17 @@ func Create(c *gin.Context) {
 	}
 
 	item := entity.SubjectStudyTime{
-		SubjectID: req.SubjectID,
+		SubjectID: subjectID,
 		StartAt:   st,
 		EndAt:     et,
 	}
 
 	if err := db.Create(&item).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
 		return
 	}
 
@@ -176,9 +186,9 @@ func Update(c *gin.Context) {
 		First(&st).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "study time not found"})
-			return
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		}
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -212,7 +222,11 @@ func Update(c *gin.Context) {
 	}
 
 	if err := db.Save(&st).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
 		return
 	}
 
@@ -233,7 +247,11 @@ func Delete(c *gin.Context) {
 		Delete(&entity.SubjectStudyTime{})
 
 	if res.Error != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": res.Error.Error()})
+		if errors.Is(res.Error, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "study time not found"})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": res.Error.Error()})
+		}
 		return
 	}
 	if res.RowsAffected == 0 {

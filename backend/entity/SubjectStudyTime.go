@@ -2,7 +2,6 @@ package entity
 
 import (
 	"time"
-
 )
 
 // ตารางเก็บเวลาเรียน
@@ -13,5 +12,5 @@ type SubjectStudyTime struct {
 	EndAt     time.Time `json:"end_at" gorm:"type:datetime;not null"`
 
 	// ความสัมพันธ์กลับไปที่ Subject
-	Subject Subjects `gorm:"foreignKey:SubjectID;references:SubjectID"`
+	Subject *Subjects `json:"-" gorm:"foreignKey:SubjectID;references:SubjectID"`
 }

@@ -8,7 +8,7 @@ const apiUrl = "http://localhost:8000";
  * GET /subjects/:subjectId/times
  */
 export const getStudyTimesBySubject = async (
-  subjectId: string
+  subjectId: string,
 ): Promise<SubjectStudyTimeInterface[]> => {
   if (!subjectId) {
     throw new Error("subjectId is required");
@@ -29,7 +29,7 @@ export const getStudyTimesBySubject = async (
  */
 export const getStudyTimeOne = async (
   subjectId: string,
-  timeId: number | string
+  timeId: number | string,
 ): Promise<SubjectStudyTimeInterface> => {
   if (!subjectId) throw new Error("subjectId is required");
   if (timeId === null || timeId === undefined)
@@ -37,7 +37,7 @@ export const getStudyTimeOne = async (
 
   try {
     const response = await axios.get(
-      `${apiUrl}/subjects/${subjectId}/times/${timeId}`
+      `${apiUrl}/subjects/${subjectId}/times/${timeId}`,
     );
     return response.data as SubjectStudyTimeInterface;
   } catch (error) {
@@ -49,20 +49,17 @@ export const getStudyTimeOne = async (
 /**
  * ✅ เพิ่มช่วงเวลาเรียนใหม่ (หนึ่งช่วง)
  * POST /subjects/:subjectId/times
- * body: { start, end }
+ * body: { start, end } // ไม่ต้องส่ง subject_id
  */
 export const addStudyTime = async (
   subjectId: string,
-  data: { start: string; end: string }
+  data: { start: string; end: string },
 ): Promise<SubjectStudyTimeInterface> => {
   if (!subjectId) throw new Error("subjectId is required");
   try {
     const response = await axios.post(
       `${apiUrl}/subjects/${subjectId}/times/`,
-      {
-        subject_id: subjectId, // ส่งเผื่อไว้ แต่ฝั่ง backend จะอ่านจาก path เป็นหลัก
-        ...data,
-      }
+      data,
     );
     return response.data as SubjectStudyTimeInterface;
   } catch (error) {
@@ -78,7 +75,7 @@ export const addStudyTime = async (
 export const updateStudyTime = async (
   subjectId: string,
   timeId: number | string,
-  data: Partial<{ start: string; end: string }>
+  data: Partial<{ start: string; end: string }>,
 ): Promise<SubjectStudyTimeInterface> => {
   if (!subjectId) throw new Error("subjectId is required");
   if (timeId === null || timeId === undefined)
@@ -87,7 +84,7 @@ export const updateStudyTime = async (
   try {
     const response = await axios.put(
       `${apiUrl}/subjects/${subjectId}/times/${timeId}`,
-      data
+      data,
     );
     return response.data as SubjectStudyTimeInterface;
   } catch (error) {
@@ -102,7 +99,7 @@ export const updateStudyTime = async (
  */
 export const deleteStudyTime = async (
   subjectId: string,
-  timeId: number | string
+  timeId: number | string,
 ): Promise<void> => {
   if (!subjectId) throw new Error("subjectId is required");
   if (timeId === null || timeId === undefined)
