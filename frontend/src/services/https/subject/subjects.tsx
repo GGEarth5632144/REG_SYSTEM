@@ -30,7 +30,7 @@ const mapSubjectFromAPI = (s: SubjectAPI): SubjectInterface => ({
 export const createSubject = async (
   data: SubjectInterface
 ): Promise<SubjectInterface> => {
-  // ---- Runtime guards (ช่วยทั้งความถูกต้องและให้ TS narrow type) ----
+  // Guard ให้แน่ใจว่าค่าจำเป็นครบและเป็นชนิดถูกต้อง
   const { SubjectID, SubjectName, MajorID, FacultyID, Credit } = data;
 
   if (!SubjectID)   throw new Error("SubjectID is required");
@@ -44,24 +44,67 @@ export const createSubject = async (
   }
 
   const payload: SubjectCreateDTO = {
-    subject_id:   SubjectID,    // ตอนนี้ TS รู้ว่าเป็น string แน่นอน
+    subject_id:   SubjectID,
     subject_name: SubjectName,
     credit:       creditNum,
     major_id:     MajorID,
     faculty_id:   FacultyID,
   };
 
-  const res = await axios.post<SubjectAPI>(
-    `${apiUrl}/subjects/`,
-    payload,
-    { headers: { "Content-Type": "application/json" } }
-  );
-
-  return mapSubjectFromAPI(res.data);
+  try {
+    // ✅ ต้องมีสแลชท้ายให้ตรงกับ route: POST "/subjects/"
+    const res = await axios.post<SubjectAPI>(
+      `${apiUrl}/subjects/`,
+      payload,
+      { headers: { "Content-Type": "application/json" } }
+    );
+    return mapSubjectFromAPI(res.data);
+  } catch (err: unknown) {
+    // ช่วยดีบัก: โชว์ response จาก server ถ้ามี
+    if (axios.isAxiosError(err)) {
+      console.error("createSubject error:", {
+        url: `${apiUrl}/subjects/`,
+        status: err.response?.status,
+        data: err.response?.data,
+      });
+    } else {
+      console.error("createSubject error:", err);
+    }
+    throw err;
+  }
 };
 
 export const getSubjectAll = async (): Promise<SubjectInterface[]> => {
-  const res = await axios.get<SubjectAPI[]>(`${apiUrl}/subjects/`);
-  const arr = Array.isArray(res.data) ? res.data : [];
-  return arr.map(mapSubjectFromAPI);
+  try {
+    // GET ฝั่ง Go เปิดไว้ที่ GET "/subjects/" → ใช้มีสแลชท้ายเช่นกัน
+    const res = await axios.get<SubjectAPI[]>(`${apiUrl}/subjects/`);
+    const arr = Array.isArray(res.data) ? res.data : [];
+    return arr.map(mapSubjectFromAPI);
+  } catch (err: unknown) {
+    if (axios.isAxiosError(err)) {
+      console.error("getSubjectAll error:", {
+        url: `${apiUrl}/subjects/`,
+        status: err.response?.status,
+        data: err.response?.data,
+      });
+    } else {
+      console.error("getSubjectAll error:", err);
+    }
+    throw err;
+  }
+};
+
+export const updateSubject = async (
+  subjectId: string,
+  data: Partial<{ subject_name: string; credit: number; major_id: string; faculty_id: string }>
+): Promise<void> => {
+  if (!subjectId) throw new Error("subjectId is required");
+  await axios.put(`${apiUrl}/subjects/${subjectId}`, data, {
+    headers: { "Content-Type": "application/json" },
+  });
+};
+
+export const deleteSubject = async (subjectId: string): Promise<void> => {
+  if (!subjectId) throw new Error("subjectId is required");
+  await axios.delete(`${apiUrl}/subjects/${subjectId}`);
 };

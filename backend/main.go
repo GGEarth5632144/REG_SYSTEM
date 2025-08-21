@@ -38,6 +38,7 @@ func main() {
 
 	// -------------------- Gin Setup --------------------
 	r := gin.Default()
+	r.RedirectTrailingSlash = true
 	r.Use(cors.Default())
 	r.Use(CORSMiddleware())
 
@@ -137,6 +138,7 @@ func main() {
 			subjectItem.DELETE("", subjects.DeleteSubject)
 
 			// เวลาศึกษาของวิชานั้นๆ
+			// Allow trailing slash in study time routes
 			times := subjectItem.Group("/times")
 			{
 				times.GET("", subjectstudytime.GetBySubject)
@@ -156,30 +158,30 @@ func main() {
 	r.Run("localhost:" + port)
 }
 
-// CORSMiddleware กำหนด CORS headers และจัดการ preflight (OPTIONS)
 func CORSMiddleware() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		// ตั้งค่า CORS headers (อนุญาตทุก origin)
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
-		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
-		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With")
-		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+    return func(c *gin.Context) {
+        origin := c.GetHeader("Origin")
+        if origin != "" {
+            // ถ้าต้องใช้ cookie/credentials (เช่น Authorization)
+            c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
+            c.Writer.Header().Set("Vary", "Origin")
+            c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+        } else {
+            // ถ้าไม่ใช้ credentials ก็เปิด * ได้
+            c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+        }
 
-		// จัดการ preflight request
-		if c.Request.Method == "OPTIONS" {
-			c.AbortWithStatus(204)
-			return
-		}
+        c.Writer.Header().Set("Access-Control-Allow-Headers",
+            "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, Accept, Origin, Cache-Control, X-Requested-With")
+        // ชื่อ header ต้องเป็น Methods (มี s)
+        c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 
-		// ดำเนินการต่อ
-		c.Next()
+        if c.Request.Method == http.MethodOptions {
+            c.AbortWithStatus(http.StatusNoContent) // 204
+            return
+        }
 
-		// หากมี error ระหว่างการทำงาน ตอบกลับเป็น JSON
-		if len(c.Errors) > 0 {
-			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-				"status": "error",
-				"errors": c.Errors.JSON(),
-			})
-		}
-	}
+        c.Next()
+    }
 }
+
