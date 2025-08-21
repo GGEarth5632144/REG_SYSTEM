@@ -1,7 +1,7 @@
 import axios from "axios";
 import { type SubjectInterface } from "../../../interfaces/Subjects";
 
-const apiUrl = "http://localhost:8000";
+import { apiUrl } from "../../api";
 
 export const createSubject = async (
   data: SubjectInterface

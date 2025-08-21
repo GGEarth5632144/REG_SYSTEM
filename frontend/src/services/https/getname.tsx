@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const apiUrl = "http://localhost:8000";
+import { apiUrl } from "../api";
 
 export const GetNameStudent = async (username: string) => {
   //console.log("Fetching student data for:", username);

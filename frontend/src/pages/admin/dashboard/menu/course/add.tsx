@@ -42,6 +42,7 @@ interface SubjectRow extends SubjectInterface {
 }
 
 interface FormValues extends SubjectInterface {
+  SubjectID: string;
   schedule: [dayjs.Dayjs, dayjs.Dayjs][];
 }
 
@@ -96,7 +97,7 @@ const ADD: React.FC = () => {
   const fetchFaculties = async () => {
     try {
       setLoadingFaculties(true);
-      const resp = await fetch("/api/faculties");
+      const resp = await fetch("/api/faculties/");
       if (!resp.ok) throw new Error("Failed to load faculties");
       // สมมติ backend คืน snake_case: [{ faculty_id, faculty_name }]
       const data = await resp.json();
@@ -115,7 +116,7 @@ const ADD: React.FC = () => {
   const fetchMajors = async () => {
     try {
       setLoadingMajors(true);
-      const resp = await fetch("/api/majors");
+      const resp = await fetch("/api/majors/");
       if (!resp.ok) throw new Error("Failed to load majors");
       // สมมติ backend คืน snake_case: [{ major_id, major_name, faculty_id }]
       const data = await resp.json();
@@ -134,7 +135,7 @@ const ADD: React.FC = () => {
 
   const fetchSubjects = async () => {
     try {
-      const resp = await fetch("/api/subjects");
+      const resp = await fetch("/api/subjects/");
       if (!resp.ok) throw new Error("Failed to load subjects");
       const data = await resp.json();
 
@@ -145,11 +146,20 @@ const ADD: React.FC = () => {
             s.study_times ??
             s.schedule ??
             []
-          ).map((range) => {
-            const start = range.start || range.start_time || range.StartAt;
-            const end = range.end || range.end_time || range.EndAt;
-            return { StartAt: start, EndAt: end };
-          });
+          ).map(
+            (range: {
+              start?: string;
+              start_time?: string;
+              StartAt?: string;
+              end?: string;
+              end_time?: string;
+              EndAt?: string;
+            }) => {
+              const start = range.start || range.start_time || range.StartAt;
+              const end = range.end || range.end_time || range.EndAt;
+              return { StartAt: start, EndAt: end };
+            }
+          );
           const formattedSchedule = schedule.map((t) => {
             const start = dayjs(t.StartAt, "YYYY-MM-DD HH:mm");
             const end = dayjs(t.EndAt, "YYYY-MM-DD HH:mm");
@@ -158,15 +168,15 @@ const ADD: React.FC = () => {
             )}`;
           });
           return {
-            subjectId: s.subject_id ?? s.subjectId ?? s.SubjectID ?? s.id,
-            name: s.subject_name ?? s.subjectName ?? s.SubjectName ?? s.name,
-            Credit: s.credit,
+            SubjectID: s.subject_id ?? s.subjectId ?? s.SubjectID ?? s.id,
+            SubjectName:
+              s.subject_name ?? s.subjectName ?? s.SubjectName ?? s.name,
             schedule,
             formattedSchedule,
-            facultyId: s.faculty_id ?? s.facultyId ?? s.FacultyID,
-            facultyName: s.faculty_name ?? s.facultyName ?? s.FacultyName,
-            majorId: s.major_id ?? s.majorId ?? s.MajorID,
-            majorName: s.major_name ?? s.majorName ?? s.MajorName,
+            FacultyID: s.faculty_id ?? s.facultyId ?? s.FacultyID,
+            FacultyName: s.faculty_name ?? s.facultyName ?? s.FacultyName,
+            MajorID: s.major_id ?? s.majorId ?? s.MajorID,
+            MajorName: s.major_name ?? s.majorName ?? s.MajorName,
           };
         }
       );
@@ -265,6 +275,19 @@ const ADD: React.FC = () => {
               width: "100%",
             }}
           >
+            {/* รหัสวิชา */}
+            <Form.Item
+              label="รหัสวิชา"
+              name="SubjectID"
+              rules={[{ required: true, message: "กรุณากรอกรหัสวิชา" }]}
+              style={{ width: "100%" }}
+            >
+              <Input
+                placeholder="เช่น CS101"
+                style={{ height: 44, maxWidth: 300, fontSize: 15 }}
+              />
+            </Form.Item>
+
             {/* ชื่อรายวิชา */}
             <Form.Item
               label="ชื่อรายวิชา"
@@ -307,19 +330,27 @@ const ADD: React.FC = () => {
             </Form.Item>
 
             {/* เวลาเรียน (แก้ name ให้ถูก + เก็บเป็นคู่ [start, end]) */}
-            <Form.Item
-              label="เวลาเรียน"
-              name="schedule"
-              rules={[{ required: true, message: "กรุณากรอกเวลาเรียน" }]}
-              style={{ width: "100%" }}
-            >
+            <Form.Item label="เวลาเรียน" style={{ width: "100%" }}>
               <>
                 <Typography.Text type="danger">
                   หมายเหตุ: เพิ่มได้หลายช่วงเวลา
                 </Typography.Text>
                 <div style={{ height: 5 }} aria-hidden="true" />
-                <Form.List name="schedule">
-                  {(fields, { add, remove }) => (
+                <Form.List
+                  name="schedule"
+                  rules={[
+                    {
+                      validator: async (_, names) => {
+                        if (!names || names.length === 0) {
+                          return Promise.reject(
+                            new Error("กรุณากรอกเวลาเรียน")
+                          );
+                        }
+                      },
+                    },
+                  ]}
+                >
+                  {(fields, { add, remove }, { errors }) => (
                     <>
                       {fields.map(({ key, name }) => (
                         <Space
@@ -360,6 +391,7 @@ const ADD: React.FC = () => {
                           เพิ่มเวลาเรียน
                         </Button>
                       </Form.Item>
+                      <Form.ErrorList errors={errors} />
                     </>
                   )}
                 </Form.List>

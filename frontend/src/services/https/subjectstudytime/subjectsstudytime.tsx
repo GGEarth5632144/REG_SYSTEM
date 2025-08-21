@@ -1,7 +1,7 @@
 import axios from "axios";
 import { type SubjectStudyTimeInterface } from "../../../interfaces/SubjectsStudyTime";
 
-const apiUrl = "http://localhost:8000";
+import { apiUrl } from "../../api";
 
 const mapStudyTime = (data: any): SubjectStudyTimeInterface => ({
   ID: data.id ?? data.ID,
