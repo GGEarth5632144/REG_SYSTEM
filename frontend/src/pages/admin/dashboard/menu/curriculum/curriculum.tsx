@@ -1,7 +1,6 @@
 // src/pages/dashboard/menu/register.tsx
 import React, { useState } from "react";
 import { Layout, Button } from "antd";
-import "./curriculum.css";
 import ADD from "./add";
 import CHANGE from "./change";
 
@@ -18,9 +17,9 @@ const wrapperStyle: React.CSSProperties = {
 };
 const headerStyle: React.CSSProperties = {
   height: 64,
-  display: "flex",           // ⬅️ ต้องเป็น flex ไม่ใช่ "center"
-  alignItems: "center",      // จัดกึ่งกลางแนวตั้ง
-  justifyContent: "center",  // จัดกึ่งกลางแนวนอน
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
   background: "#2e236c",
   color: "white",
   padding: "0 16px",
@@ -40,65 +39,53 @@ const footerStyle: React.CSSProperties = {
   textAlign: "center",
   padding: 12,
 };
-// --- Center box for buttons ---
-const centerBox: React.CSSProperties = {
-  minHeight: "50vh", // ensures vertical space to truly center
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-};
+
 const Curriculum: React.FC = () => {
   const [active, setActive] = useState<"add" | "change" | null>(null);
 
   return (
     <Layout style={wrapperStyle}>
       <Header style={headerStyle}>
-        <div style={{ color: "white", fontWeight: "bold" ,justifyContent: "center", }}>
-          Curriculum – ระบบจัดการหลักสูตร
+        <div
+          style={{
+            color: "white",
+            fontWeight: "bold",
+            justifyContent: "center",
+          }}
+        >
+          Curriculum ระบบจัดการหลักสูตร
         </div>
       </Header>
       <Content style={contentStyle}>
         {active === null ? (
-          // 🔹 ยังไม่กดปุ่มใด ๆ → แสดงปุ่ม ADD + CHANGE
-          <div style={centerBox}>
-            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-              <Button
-                type="primary"
-                style={{
-                  width: 250,
-                  height: 70,
-                  fontSize: 22,
-                  backgroundColor: "#2e236c",
-                }}
-                onClick={() => setActive("add")}
-              >
-                ADD
-              </Button>
-              <Button
-                type="primary"
-                style={{
-                  width: 250,
-                  height: 70,
-                  fontSize: 22,
-                  backgroundColor: "#2e236c",
-                }}
-                onClick={() => setActive("change")}
-              >
-                CHANGE
-              </Button>
-            </div>
-          </div>
+          <Button
+            type="primary"
+            style={{
+              position: "absolute", // Allow absolute positioning
+              top: "27%", // Adjust the distance from the top
+              left: "93%", // Center horizontally
+              transform: "translateX(-93%)", // Center horizontally exactly
+              width: 100,
+              height: 30,
+              fontSize: 15,
+              backgroundColor: "#1890ff",
+            }}
+            onClick={() => setActive("add")}
+          >
+            เพิ่มหลักสูตร
+          </Button>
         ) : (
-          // 🔹 ถ้ากด ADD หรือ CHANGE → แสดงปุ่มกลับ
+          // Show BACK button
           <Button onClick={() => setActive(null)} type="dashed">
             ← กลับ
           </Button>
         )}
 
-        <div style={{ marginTop: 16 }}>
-          {active === "add" && <ADD />}
-          {active === "change" && <CHANGE />}
-        </div>
+        {/* Only show ADD if active is "add", hide CHANGE */}
+        {active === "add" && <ADD />}
+
+        {/* CHANGE component is always available but hidden when active is "add" */}
+        {active !== "add" && <CHANGE />}
       </Content>
       <Footer style={footerStyle}>Arcana University © 2025</Footer>
     </Layout>

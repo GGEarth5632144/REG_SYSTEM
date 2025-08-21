@@ -10,6 +10,7 @@ import {
   Select,
   DatePicker,
 } from "antd";
+import type { ColumnsType, ColumnType } from "antd/es/table";
 import dayjs from "dayjs";
 import { SearchOutlined } from "@ant-design/icons";
 const { Content } = Layout;
@@ -20,6 +21,10 @@ interface DataType {
   credit: number;
   studyTime: { start: string; end: string }[] | null; // Allow null for studyTime
   major: string;
+}
+interface EditableColumnType extends ColumnType<DataType> {
+  editable?: boolean;
+  inputType?: "number" | "text" | "time" | "select";
 }
 
 const originData: DataType[] = [
@@ -246,7 +251,7 @@ const CHANGE: React.FC = () => {
       item.major.toLowerCase().includes(searchText.toLowerCase())
   );
 
-  const columns = [
+  const columns: EditableColumnType[] = [
     {
       title: "Subject Name",
       dataIndex: "subjectName",
@@ -336,31 +341,29 @@ const CHANGE: React.FC = () => {
     },
   ];
 
-  const mergedColumns = columns.map((col) => {
-    if (!col.editable) {
-      return col;
-    }
-    return {
-      ...col,
-      onCell: (record: DataType, rowIndex: number) => ({
-        record,
-        inputType:
-          col.dataIndex === "studyTime"
-            ? "time"
-            : col.dataIndex === "credit"
-            ? "number"
-            : col.dataIndex === "major"
-            ? "select"
-            : "text",
-        dataIndex: col.dataIndex,
-        columnTitle: col.title,
-        editing: isEditing(record),
-        setData, // Pass setData as prop
-        data, // Pass the current data
-        index: rowIndex, // Pass the row index
-      }),
-    };
-  });
+  const mergedColumns: ColumnsType<DataType> = columns.map((col) => ({
+    ...col,
+    onCell: col.editable
+      ? (record: DataType, rowIndex?: number) =>
+          ({
+            record,
+            inputType:
+              col.dataIndex === "studyTime"
+                ? "time"
+                : col.dataIndex === "credit"
+                ? "number"
+                : col.dataIndex === "major"
+                ? "select"
+                : "text",
+            dataIndex: col.dataIndex,
+            columnTitle: col.title,
+            editing: isEditing(record),
+            setData, // Pass setData as prop
+            data, // Pass the current data
+            index: rowIndex!, // Pass the row index
+          } as EditableCellProps)
+      : undefined,
+  }));
 
   return (
     <Layout style={{ minHeight: "100vh" }}>
