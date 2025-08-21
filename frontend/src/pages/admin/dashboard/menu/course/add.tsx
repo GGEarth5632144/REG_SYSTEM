@@ -10,6 +10,7 @@ import {
   Space,
   Popconfirm,
   Table,
+  message,
 } from "antd";
 import { PlusOutlined } from "@ant-design/icons"; // Import Plus icon
 import dayjs from "dayjs"; // ใช้ dayjs ในการจัดการวัน
@@ -27,6 +28,13 @@ type Subject = {
   schedule: { start: string; end: string }[]; // Array of objects with start and end strings
   formattedSchedule?: string[]; // Optional property for formatted schedule
   facultyId: string;
+};
+
+type FormValues = {
+  name: string;
+  credit: number;
+  facultyId: string;
+  schedule: [dayjs.Dayjs, dayjs.Dayjs][];
 };
 
 const pageStyle: React.CSSProperties = {
@@ -57,39 +65,61 @@ const ADD: React.FC = () => {
   const [form] = Form.useForm();
   const [faculties, setFaculties] = useState<Faculty[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
-
+  const [loadingFaculties, setLoadingFaculties] = useState(false);
   // ให้ useEffect แปลงข้อมูลทุกตัว ไม่ใช่แค่ id = "1"
   useEffect(() => {
-    const subjectsWithFormatted = originData.map((subject) => ({
-      ...subject,
-      formattedSchedule: subject.schedule.map((range: any) => {
-        const start = dayjs(range.start, "YYYY-MM-DD HH:mm");
-        const end = dayjs(range.end, "YYYY-MM-DD HH:mm");
-        return `${start.format("dddd HH:mm")} - ${end.format("dddd HH:mm")}`;
-      }),
-    }));
-    setSubjects(subjectsWithFormatted);
-  }, []);
+    const fetchFaculties = async () => {
+      try {
+        setLoadingFaculties(true);
+        const resp = await fetch("/api/faculties");
+        if (!resp.ok) throw new Error("Failed to load faculties");
+        const data = await resp.json();
+        setFaculties(data);
+      } catch {
+        message.error("โหลดรายชื่อคณะไม่สำเร็จ");
+      } finally {
+        setLoadingFaculties(false);
+      }
+    };
 
+    const fetchSubjects = async () => {
+      try {
+        const resp = await fetch("/api/subjects");
+        if (!resp.ok) throw new Error("Failed to load subjects");
+        const subjectsData: Subject[] = await resp.json();
+        const subjectsWithFormatted = subjectsData.map((subject) => ({
+          ...subject,
+          formattedSchedule: subject.schedule.map(
+            (range: { start: string; end: string }) => {
+              const start = dayjs(range.start, "YYYY-MM-DD HH:mm");
+              const end = dayjs(range.end, "YYYY-MM-DD HH:mm");
+              return `${start.format("dddd HH:mm")} - ${end.format(
+                "dddd HH:mm"
+              )}`;
+            }
+          ),
+        }));
+        setSubjects(subjectsWithFormatted);
+      } catch {
+        message.error("โหลดข้อมูลรายวิชาไม่สำเร็จ");
+      }
+    };
+
+    fetchFaculties();
+    fetchSubjects();
+  }, []);
   // Handle form submission
-  const onFinish = async (values: any) => {
-    // values.schedule = [ [dayjs, dayjs], [dayjs, dayjs], ... ]
-    const scheduleForBackend = values.schedule.map(
-      (range: [dayjs.Dayjs, dayjs.Dayjs]) => ({
+  const onFinish = async (values: FormValues) => {
+    const payload = {
+      name: values.name,
+      credit: values.credit,
+      facultyId: values.facultyId,
+      schedule: values.schedule.map((range) => ({
         start: range[0].format("YYYY-MM-DD HH:mm"),
         end: range[1].format("YYYY-MM-DD HH:mm"),
-      })
-    );
-
-    // const payload = {
-    //   name: values.name,
-    //   credit: values.credit,
-    //   facultyId: values.facultyId,
-    //   schedule: scheduleForBackend,
-    // };
-
-    // ส่ง payload ไป backend
-    // fetch("/api/subject", { ... })
+      })),
+    };
+    console.log(payload);
   };
 
   return (
@@ -216,6 +246,7 @@ const ADD: React.FC = () => {
             >
               <Select
                 placeholder="เลือกสาขา"
+                loading={loadingFaculties}
                 style={{ maxWidth: 300, fontSize: 15, width: "100%" }}
               >
                 {faculties.map((f) => (

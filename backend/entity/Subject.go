@@ -1,5 +1,7 @@
 package entity
-
+import (
+	"time"
+)
 type Subjects struct {
 	SubjectID   string `json:"subject_id" gorm:"primaryKey"`
 	SubjectName string `json:"subject_name"`
