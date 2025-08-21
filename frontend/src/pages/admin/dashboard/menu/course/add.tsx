@@ -1,11 +1,3 @@
-// ====================================================================
-// AddSubject.tsx — หน้าเพิ่มรายวิชา + แสดงรายวิชาที่มีอยู่
-// - ดึง Faculties และ Majors แยกกัน
-// - ส่งค่า subject_name, credit, major_id, faculty_id ไปหลังบ้าน
-// - แสดงชื่อคณะ (faculty_name) และสาขา (major_name) ในตาราง
-// - แก้ Form.List schedule + รวม useEffect เดียวให้ถูกวงเล็บ
-// ====================================================================
-
 import React, { useState, useEffect, useMemo } from "react";
 import {
   Layout,
@@ -24,8 +16,10 @@ import { PlusOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
 import { type SubjectInterface } from "../../../../../interfaces/Subjects";
 import { type SubjectStudyTimeInterface } from "../../../../../interfaces/SubjectsStudyTime";
-import { createSubject } from "../../../../../services/https/subject/subjects";
+import { createSubject, getSubjectAll } from "../../../../../services/https/subject/subjects";
 import { addStudyTime } from "../../../../../services/https/subjectstudytime/subjectsstudytime";
+import { getFacultyAll } from "../../../../../services/https/faculty/faculty";
+import { getMajorAll } from "../../../../../services/https/major/major";
 const { Content } = Layout;
 const { Title, Text } = Typography;
 const { Option } = Select;
@@ -97,10 +91,7 @@ const ADD: React.FC = () => {
   const fetchFaculties = async () => {
     try {
       setLoadingFaculties(true);
-      const resp = await fetch("/api/faculties/");
-      if (!resp.ok) throw new Error("Failed to load faculties");
-      // สมมติ backend คืน snake_case: [{ faculty_id, faculty_name }]
-      const data = await resp.json();
+      const data = await getFacultyAll();
       const mapped: Faculty[] = (Array.isArray(data) ? data : []).map((f) => ({
         id: f.faculty_id ?? f.facultyId ?? f.FacultyID ?? f.id,
         name: f.faculty_name ?? f.facultyName ?? f.FacultyName ?? f.name,
@@ -116,10 +107,7 @@ const ADD: React.FC = () => {
   const fetchMajors = async () => {
     try {
       setLoadingMajors(true);
-      const resp = await fetch("/api/majors/");
-      if (!resp.ok) throw new Error("Failed to load majors");
-      // สมมติ backend คืน snake_case: [{ major_id, major_name, faculty_id }]
-      const data = await resp.json();
+      const data = await getMajorAll();
       const mapped: Major[] = (Array.isArray(data) ? data : []).map((m) => ({
         id: m.major_id ?? m.majorId ?? m.MajorID ?? m.id,
         name: m.major_name ?? m.majorName ?? m.MajorName ?? m.name,
@@ -135,9 +123,7 @@ const ADD: React.FC = () => {
 
   const fetchSubjects = async () => {
     try {
-      const resp = await fetch("/api/subjects/");
-      if (!resp.ok) throw new Error("Failed to load subjects");
-      const data = await resp.json();
+      const data = await getSubjectAll();
 
       // สมมติ backend คืน snake_case: subject_id, subject_name, credit, major_id, faculty_id, study_times, major_name, faculty_name
       const mapped: SubjectRow[] = (Array.isArray(data) ? data : []).map(

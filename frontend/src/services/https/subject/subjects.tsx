@@ -23,3 +23,13 @@ export const createSubject = async (
     throw error;
   }
 };
+
+export const getSubjectAll = async (): Promise<SubjectInterface[]> => {
+  try {
+    const response = await axios.get(`${apiUrl}/subjects/`);
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching subject data:", error);
+    throw error;
+  }
+};
