@@ -41,22 +41,12 @@ interface EditableColumnType extends ColumnType<DataType> {
 // NOTE: ปรับ path import ให้ตรงโปรเจ็กต์จริงของคุณ
 import { getFacultyAll } from "../../../../../services/https/faculty/faculty";
 import { getSubjectAll } from "../../../../../services/https/subject/subjects";
+import type { CurriculumUpdateDTO } from "../../../../../services/https/curriculum/curriculum";
 import {
   getCurriculumAll,
   updateCurriculum, // (id: string, dto: Partial<CurriculumUpdateDTO>)
   deleteCurriculum, // (id: string)
 } from "../../../../../services/https/curriculum/curriculum";
-
-// ====== DTO ฝั่ง FE สำหรับส่งอัปเดตให้ backend (ให้คีย์ตรงกับ Go) ======
-type CurriculumUpdateDTO = Partial<{
-  curriculum_name: string;
-  total_credit: number;
-  start_year: number;
-  faculty_id: string;
-  major_id: string;
-  book_id: number;
-  description: string;
-}>;
 
 // ====================== 3) Normalizer: แปลง backend → frontend ======================
 type FacultyOpt = { id: string; name: string };
@@ -314,18 +304,42 @@ const CHANGE: React.FC = () => {
       const current = data.find((d) => d.key === key);
       if (!current) return;
 
-      const dto: CurriculumUpdateDTO = {
-        curriculum_name: row.name ?? current.name,
-        total_credit: row.credit ?? current.credit,
-        start_year: row.startYear ?? current.startYear,
-        faculty_id: row.facultyId ?? current.facultyId,
+      // สร้าง patch เป็น snake_case ให้ตรงกับ CurriculumUpdateDTO
+      const patch: CurriculumUpdateDTO = {
+        curriculum_name: (row.name ?? current.name) || undefined,
+        total_credit: row.credit ?? current.credit ?? undefined,
+        start_year: row.startYear ?? current.startYear ?? undefined,
+        faculty_id: (row.facultyId ?? current.facultyId) || undefined,
+        // ถ้าคุณมี field เพิ่มใน UI ค่อย map เพิ่ม:
+        // major_id: ...,
+        // book_id:  ...,
+        // description: ...,
       };
 
-      await updateCurriculum(current.id, dto);
+      // ลบ key ที่เป็น undefined ออกจาก object (กันส่งค่าเปล่าๆไปทับ)
+      Object.keys(patch).forEach((k) => {
+        const keyK = k as keyof CurriculumUpdateDTO;
+        if (patch[keyK] === undefined) delete patch[keyK];
+      });
 
+      await updateCurriculum(current.id, patch);
+
+      // อัปเดต state ฝั่ง frontend ให้สะท้อนค่าที่เพิ่งบันทึก
       setData((prev) =>
-        prev.map((it) => (it.key === key ? { ...it, ...row } : it))
+        prev.map((it) =>
+          it.key === key
+            ? {
+                ...it,
+                name: patch.curriculum_name ?? it.name,
+                credit: (patch.total_credit as number | undefined) ?? it.credit,
+                startYear:
+                  (patch.start_year as number | undefined) ?? it.startYear,
+                facultyId: patch.faculty_id ?? it.facultyId,
+              }
+            : it
+        )
       );
+
       setEditingKey("");
       message.success("บันทึกสำเร็จ");
     } catch (err) {
@@ -333,7 +347,6 @@ const CHANGE: React.FC = () => {
       message.error("บันทึกไม่สำเร็จ");
     }
   };
-
   // ลบแถวจริงจาก backend + ลบในตาราง
   const handleDelete = async (key: React.Key) => {
     const target = data.find((d) => d.key === key);

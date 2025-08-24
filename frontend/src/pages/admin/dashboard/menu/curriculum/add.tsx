@@ -1,12 +1,5 @@
-// ====================================================================
-// AddCurriculum.tsx — เพิ่ม/แสดง "หลักสูตร" จากหลังบ้านจริง (No mock, No any)
-// - โหลดคณะ/สาขา/หนังสือ/หลักสูตร จาก services จริง
-// - สร้างหลักสูตรด้วย snake_case DTO ให้ตรง backend (เหมือนหน้า CHANGE)
-// - ล่างสุดมีตาราง "หลักสูตรที่เพิ่มแล้ว" + ช่องค้นหา (ชื่อ/รหัส/คณะ/สาขา)
-// - ไม่มี any: ใช้ helper pickString/pickNumber/pickArray สำหรับ normalize
-// ====================================================================
-
-import React, { useEffect, useMemo, useState } from "react";
+import { type CurriculumInterface } from "../../../../../interfaces/Curriculum";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Layout,
   Form,
@@ -17,18 +10,18 @@ import {
   InputNumber,
   message,
   Table,
+  Upload,
+  Alert,
+  Modal,
 } from "antd";
-
-import { type CurriculumInterface } from "../../../../../interfaces/Curriculum"; // ถ้ามี
-// ถ้าไม่มี interface นี้ สามารถใช้ Local Interface ด้านล่างแทนได้ (CurriculumCreateForm)
-
+import type { UploadProps } from "antd";
 import { getFacultyAll } from "../../../../../services/https/faculty/faculty";
 import { getMajorAll } from "../../../../../services/https/major/major";
 import {
   createCurriculum,
   getCurriculumAll,
 } from "../../../../../services/https/curriculum/curriculum";
-import { getBookAll } from "../../../../../services/https/bookpath/bookpath"; // ชี้ไป services ที่คุณเพิ่งแก้
+import { uploadBook, deleteBook } from "../../../../../services/https/book/books";
 
 const { Content } = Layout;
 const { Title, Text } = Typography;
@@ -39,13 +32,6 @@ const { Option } = Select;
  * ----------------------------------------- */
 type Faculty = { id: string; name: string };
 type Major = { id: string; name: string; facultyId?: string };
-type Book = {
-  id: number;
-  originalName?: string;
-  storedName?: string;
-  path?: string;
-  publicPath?: string;
-};
 
 /* -----------------------------------------
  * รูปแบบ API response (รองรับหลายคีย์)
@@ -72,13 +58,6 @@ type MajorAPI = {
   faculty_id?: string;
   facultyId?: string;
   FacultyID?: string;
-};
-type BookAPI = {
-  id?: number | string;
-  original_name?: string;
-  stored_name?: string;
-  path?: string;
-  public_path?: string;
 };
 type CurriculumAPI = {
   curriculum_id?: string;
@@ -108,12 +87,12 @@ type CurriculumAPI = {
 
   book_id?: number | string;
   BookID?: number | string;
-  book_path?: string;     // จาก preload Book.Path
+  book_path?: string; // ไม่ใช้สำหรับเปิดดูแล้ว
   description?: string;
 };
 
 /* -----------------------------------------
- * Helper: type-safe extractors
+ * Helpers
  * ----------------------------------------- */
 const pickString = (o: Record<string, unknown>, keys: string[], def = ""): string => {
   for (const k of keys) {
@@ -133,9 +112,23 @@ const pickNumber = (o: Record<string, unknown>, keys: string[], def = 0): number
   }
   return def;
 };
+const formatBytes = (bytes?: number): string => {
+  if (!bytes || bytes <= 0) return "-";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let i = 0;
+  let n = bytes;
+  while (n >= 1024 && i < units.length - 1) {
+    n /= 1024;
+    i++;
+  }
+  const digits = n >= 10 || i === 0 ? 0 : 1;
+  return `${n.toFixed(digits)} ${units[i]}`;
+};
+const canInlinePreview = (mime?: string) =>
+  !!mime && (mime.startsWith("image/") || mime === "application/pdf");
 
 /* -----------------------------------------
- * แถวตารางหลักสูตร (ด้านล่างหน้า)
+ * แถวตารางหลักสูตร
  * ----------------------------------------- */
 type CurriculumRow = {
   CurriculumID: string;
@@ -147,10 +140,9 @@ type CurriculumRow = {
   MajorID?: string;
   MajorName?: string;
   BookID?: number;
-  BookPath?: string;
+  BookPath?: string;   // มีมาก็ไม่ใช้สำหรับเปิดไฟล์
   Description?: string;
 };
-
 const toCurriculumRow = (raw: unknown): CurriculumRow => {
   const r = (raw ?? {}) as Record<string, unknown>;
   return {
@@ -163,27 +155,13 @@ const toCurriculumRow = (raw: unknown): CurriculumRow => {
     MajorID: pickString(r, ["major_id", "MajorID"], ""),
     MajorName: pickString(r, ["major_name", "MajorName"], ""),
     BookID: pickNumber(r, ["book_id", "BookID"], 0) || undefined,
-    BookPath: pickString(r, ["book_path"], ""),
-    Description: pickString(r, ["description"], ""),
+    BookPath: pickString(r, ["book_path", "BookPath"], ""),
+    Description: pickString(r, ["description", "Description"], ""),
   };
 };
 
 /* -----------------------------------------
- * แบบฟอร์มที่ส่งขึ้น (snake_case ให้ตรงหลังบ้าน)
- * ----------------------------------------- */
-type CurriculumCreateDTO = {
-  curriculum_id: string;
-  curriculum_name: string;
-  total_credit: number;
-  start_year: number;
-  faculty_id: string;
-  major_id?: string;
-  book_id?: number; // ตาม controller ใหม่: int (อ้าง BookPath.ID)
-  description?: string;
-};
-
-/* -----------------------------------------
- * Form values บนหน้า (ตัวพิมพ์ใหญ่ตาม interface ฝั่ง FE)
+ * Form values บนหน้า
  * ----------------------------------------- */
 type CurriculumCreateForm = {
   CurriculumID: string;
@@ -192,8 +170,9 @@ type CurriculumCreateForm = {
   StartYear: number;
   FacultyID: string;
   MajorID?: string;
-  BookID?: number;
+  BookID?: number;    // จะตั้งค่าอัตโนมัติหลังอัปโหลดใน onFinish
   Description?: string;
+  LocalFilePath?: string; // ผู้ใช้กรอกเองถ้าต้องเก็บตำแหน่งไฟล์บนเครื่อง
 };
 
 /* -----------------------------------------
@@ -221,8 +200,104 @@ const formShell: React.CSSProperties = {
   flexDirection: "column",
 };
 
+/* -----------------------------------------
+ * Component ย่อย: เปิดไฟล์จากคอมพิวเตอร์ในคอลัมน์ตาราง (ไม่แตะ API/URL)
+ * ----------------------------------------- */
+const LocalFileOpener: React.FC = () => {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const [visible, setVisible] = useState(false);
+  const [objUrl, setObjUrl] = useState<string | null>(null);
+  const [fileInfo, setFileInfo] = useState<{ name: string; mime?: string; size?: number }>({
+    name: "",
+  });
+
+  const openPicker = () => inputRef.current?.click();
+
+  const onPick: React.ChangeEventHandler<HTMLInputElement> = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    // cleanup เดิมก่อน
+    if (objUrl) URL.revokeObjectURL(objUrl);
+
+    const url = URL.createObjectURL(file);
+    setObjUrl(url);
+    setFileInfo({ name: file.name, mime: file.type, size: file.size });
+    setVisible(true);
+  };
+
+  const onCancel = () => {
+    setVisible(false);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (objUrl) URL.revokeObjectURL(objUrl);
+    };
+  }, [objUrl]);
+
+  return (
+    <>
+      <input
+        ref={inputRef}
+        type="file"
+        accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
+        style={{ display: "none" }}
+        onChange={onPick}
+      />
+      <Button size="small" onClick={openPicker}>
+        เปิดจากคอมพิวเตอร์
+      </Button>
+
+      <Modal
+        title={`พรีวิวไฟล์: ${fileInfo.name || "-"}`}
+        open={visible}
+        onCancel={onCancel}
+        footer={
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+            {objUrl ? (
+              <Button onClick={() => window.open(objUrl!, "_blank", "noopener,noreferrer")}>
+                เปิดในแท็บใหม่ / ดาวน์โหลด
+              </Button>
+            ) : null}
+            <Button type="primary" onClick={onCancel}>
+              ปิด
+            </Button>
+          </div>
+        }
+        width="80vw"
+        styles={{ body: { paddingTop: 8 } }}
+      >
+        <div style={{ marginBottom: 8, color: "#666" }}>
+          ชนิดไฟล์: {fileInfo.mime || "-"} · ขนาด: {formatBytes(fileInfo.size)}
+        </div>
+
+        {!objUrl ? (
+          <div>ยังไม่มีไฟล์</div>
+        ) : canInlinePreview(fileInfo.mime) ? (
+          fileInfo.mime?.startsWith("image/") ? (
+            <img
+              src={objUrl}
+              alt="local preview"
+              style={{ display: "block", width: "100%", maxHeight: "75vh", objectFit: "contain" }}
+            />
+          ) : (
+            <iframe src={objUrl} title="PDF preview" width="100%" height="75vh" style={{ border: "none" }} />
+          )
+        ) : (
+          <Alert
+            type="info"
+            showIcon
+            message="ไม่สามารถแสดงพรีวิวชนิดไฟล์นี้ในเบราว์เซอร์ได้"
+            description="กดปุ่ม “เปิดในแท็บใหม่ / ดาวน์โหลด” เพื่อเปิดด้วยโปรแกรมที่รองรับ"
+          />
+        )}
+      </Modal>
+    </>
+  );
+};
+
 /* ====================================================================
- * Component
+ * Page Component
  * ==================================================================== */
 const Add: React.FC = () => {
   const [form] = Form.useForm<CurriculumCreateForm>();
@@ -230,7 +305,6 @@ const Add: React.FC = () => {
   // options
   const [faculties, setFaculties] = useState<Faculty[]>([]);
   const [majors, setMajors] = useState<Major[]>([]);
-  const [books, setBooks] = useState<Book[]>([]);
 
   // table
   const [curriculums, setCurriculums] = useState<CurriculumRow[]>([]);
@@ -238,9 +312,20 @@ const Add: React.FC = () => {
   // ui state
   const [loadingFaculties, setLoadingFaculties] = useState(false);
   const [loadingMajors, setLoadingMajors] = useState(false);
-  const [loadingBooks, setLoadingBooks] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [query, setQuery] = useState<string>("");
+
+  // เลือกไฟล์ไว้ก่อน (ยังไม่อัปโหลด)
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploadedPreview, setUploadedPreview] = useState<
+    | {
+        name: string;
+        mime?: string;
+        size?: number;
+      }
+    | undefined
+  >(undefined);
+  const [localPreviewUrl, setLocalPreviewUrl] = useState<string | null>(null); // object URL ไว้เปิดจากเครื่อง
 
   // watch faculty to filter majors
   const selectedFacultyId = Form.useWatch("FacultyID", form);
@@ -283,27 +368,6 @@ const Add: React.FC = () => {
     }
   };
 
-  const fetchBooks = async () => {
-    try {
-      setLoadingBooks(true);
-      const data = await getBookAll();
-      const arr = (Array.isArray(data) ? data : []) as BookAPI[];
-      const mapped: Book[] = arr.map((b) => ({
-        id: Number(b.id ?? 0),
-        originalName: b.original_name,
-        storedName: b.stored_name,
-        path: b.path,
-        publicPath: b.public_path,
-      })).filter((b) => Number.isFinite(b.id) && b.id > 0);
-      setBooks(mapped);
-    } catch (err) {
-      console.error("fetchBooks error:", err);
-      message.error("โหลดรายชื่อเอกสาร (book) ไม่สำเร็จ");
-    } finally {
-      setLoadingBooks(false);
-    }
-  };
-
   const fetchCurriculums = async () => {
     try {
       const data = await getCurriculumAll();
@@ -318,9 +382,17 @@ const Add: React.FC = () => {
   useEffect(() => {
     fetchFaculties();
     fetchMajors();
-    fetchBooks();
     fetchCurriculums();
   }, []);
+
+  // cleanup object URL ตอนเปลี่ยนไฟล์หรือ unmount
+  useEffect(() => {
+    return () => {
+      if (localPreviewUrl) {
+        URL.revokeObjectURL(localPreviewUrl);
+      }
+    };
+  }, [localPreviewUrl]);
 
   /* ---------- filter majors by faculty ---------- */
   const filteredMajors = useMemo(() => {
@@ -345,30 +417,123 @@ const Add: React.FC = () => {
     });
   }, [curriculums, query]);
 
+  /* ---------- Upload: เลือกไฟล์ไว้ก่อน (ยังไม่อัปโหลด) ---------- */
+  const uploadProps: UploadProps = {
+    multiple: false,
+    accept: ".pdf,.doc,.docx,.png,.jpg,.jpeg",
+    showUploadList: false,
+    beforeUpload: (file) => {
+      // เก็บไฟล์ + ข้อมูลไว้ให้พรีวิวจาก "คอมพิวเตอร์" โดยยังไม่อัปโหลด
+      setSelectedFile(file);
+      setUploadedPreview({
+        name: file.name,
+        mime: file.type,
+        size: file.size,
+      });
+
+      // ทำ object URL เพื่อเปิดดูจากเครื่องทันที
+      if (localPreviewUrl) URL.revokeObjectURL(localPreviewUrl);
+      const url = URL.createObjectURL(file);
+      setLocalPreviewUrl(url);
+
+      message.info("เลือกไฟล์แล้ว (ยังไม่อัปโหลดจนกว่าจะกด 'เพิ่มหลักสูตร')");
+      // หยุดอัปโหลด auto ของ AntD
+      return false;
+    },
+    onChange(info) {
+      const f = info.file;
+      if (f && f.originFileObj) {
+        const of = f.originFileObj as File;
+
+        setSelectedFile(of);
+        setUploadedPreview({
+          name: of.name,
+          mime: of.type,
+          size: of.size,
+        });
+
+        // อัปเดต object URL
+        if (localPreviewUrl) URL.revokeObjectURL(localPreviewUrl);
+        const url = URL.createObjectURL(of);
+        setLocalPreviewUrl(url);
+      }
+    },
+  };
+
+  const clearSelectedFile = () => {
+    setSelectedFile(null);
+    setUploadedPreview(undefined);
+    form.setFieldsValue({ BookID: undefined });
+    if (localPreviewUrl) {
+      URL.revokeObjectURL(localPreviewUrl);
+      setLocalPreviewUrl(null);
+    }
+  };
+
   /* ---------- submit ---------- */
   const onFinish = async (values: CurriculumCreateForm) => {
     setSubmitting(true);
-    try {
-      // map → snake_case DTO (ให้ตรง controller ที่หน้า CHANGE ใช้)
-      const dto: CurriculumCreateDTO = {
-        curriculum_id: values.CurriculumID,
-        curriculum_name: values.CurriculumName,
-        total_credit: Number(values.TotalCredit),
-        start_year: Number(values.StartYear),
-        faculty_id: values.FacultyID,
-      };
-      if (values.MajorID) dto.major_id = values.MajorID;
-      if (Number.isFinite(values.BookID ?? NaN)) dto.book_id = values.BookID;
-      if (values.Description && values.Description.trim() !== "") dto.description = values.Description.trim();
+    let createdBookId: number | undefined;
 
-      await createCurriculum(dto);
+    try {
+      // 1) ถ้ามีไฟล์ที่เลือกไว้ ให้ "อัปโหลดตอนนี้"
+      if (selectedFile) {
+        const bookRes = await uploadBook(selectedFile, "currBook"); // ใช้ fieldname ให้ตรงกับฝั่ง BE
+        if (!bookRes?.ID || bookRes.ID <= 0) {
+          throw new Error("อัปโหลดไฟล์ไม่สำเร็จ หรือไม่ได้รหัสไฟล์ (ID) จากเซิร์ฟเวอร์");
+        }
+        createdBookId = bookRes.ID;
+        form.setFieldsValue({ BookID: createdBookId });
+      }
+
+      // 2) แนบ LocalFilePath เข้ากับ Description (optional)
+      const localPathNote = values.LocalFilePath?.trim();
+      const finalDescription = [
+        values.Description?.trim() || "",
+        localPathNote ? `[LocalPath] ${localPathNote}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n");
+
+      // 3) ส่งหลักสูตรขึ้น BE (พร้อม BookID ถ้ามี)
+      const payload: CurriculumInterface = {
+        CurriculumID: values.CurriculumID,
+        CurriculumName: values.CurriculumName,
+        TotalCredit: Number(values.TotalCredit),
+        StartYear: Number(values.StartYear),
+        FacultyID: values.FacultyID,
+        MajorID: values.MajorID,
+        BookID:
+          Number.isFinite((values.BookID ?? createdBookId) as number) &&
+          Number((values.BookID ?? createdBookId) as number) > 0
+            ? (values.BookID ?? createdBookId)
+            : undefined,
+        Description: finalDescription,
+        FacultyName: undefined,
+        MajorName: undefined,
+        BookPath: undefined,
+      };
+
+      await createCurriculum(payload);
       message.success("บันทึกหลักสูตรสำเร็จ");
 
+      // 4) เคลียร์ฟอร์ม/สถานะ
       form.resetFields();
+      clearSelectedFile();
+
       await fetchCurriculums();
     } catch (err) {
       console.error("[CreateCurriculum] error:", err);
-      message.error("เพิ่มหลักสูตรไม่สำเร็จ");
+      message.error((err as Error)?.message || "เพิ่มหลักสูตรไม่สำเร็จ");
+
+      // (Optional) Rollback: ถ้าอัปโหลดไฟล์ไปแล้วแต่สร้างหลักสูตรไม่ผ่าน ให้ลบไฟล์ที่อัปโหลด
+      if (createdBookId) {
+        try {
+          await deleteBook(createdBookId);
+        } catch (delErr) {
+          console.warn("Rollback deleteBook failed:", delErr);
+        }
+      }
     } finally {
       setSubmitting(false);
     }
@@ -386,7 +551,9 @@ const Add: React.FC = () => {
             <Title level={4} style={{ margin: 0 }}>
               เพิ่มหลักสูตรใหม่
             </Title>
-            <Text type="secondary">กรอกข้อมูลหลักสูตรให้ครบ แล้วกด “เพิ่มหลักสูตร”</Text>
+            <Text type="secondary">
+              กรอกข้อมูลหลักสูตรให้ครบ แล้วกด “เพิ่มหลักสูตร”
+            </Text>
           </div>
 
           <Form<CurriculumCreateForm>
@@ -434,17 +601,18 @@ const Add: React.FC = () => {
               <InputNumber placeholder="เช่น 120" style={{ width: 200, height: 44 }} />
             </Form.Item>
 
-            {/* ปีเริ่มต้นหลักสูตร */}
+            {/* ปีเริ่มหลักสูตร */}
             <Form.Item
-              label="ปีเริ่มหลักสูตร (Start Year)"
+              label="ปีเริ่มหลักสูตร (Start Year) "
               name="StartYear"
               rules={[
                 { required: true, message: "กรุณากรอกปีเริ่มหลักสูตร" },
-                { type: "number", min: 1900, max: 3000, transform: (v) => Number(v), message: "ปี 1900–3000" },
+                { type: "number", transform: (v) => Number(v) },
               ]}
+              extra={<Typography.Text type="danger">หมายเหตุ: ต้องเป็นปี พุทธศักราช (เช่น 2560)</Typography.Text>}
               style={{ width: "100%" }}
             >
-              <InputNumber placeholder="เช่น 2025" style={{ width: 200, height: 44 }} />
+              <InputNumber placeholder="เช่น 2560" style={{ width: 200, height: 44 }} />
             </Form.Item>
 
             {/* คณะ */}
@@ -454,12 +622,7 @@ const Add: React.FC = () => {
               rules={[{ required: true, message: "กรุณาเลือกคณะ" }]}
               style={{ width: "100%" }}
             >
-              <Select
-                placeholder="เลือกคณะ"
-                loading={loadingFaculties}
-                style={{ maxWidth: 320 }}
-                allowClear
-              >
+              <Select placeholder="เลือกคณะ" loading={loadingFaculties} style={{ maxWidth: 320 }} allowClear>
                 {faculties.map((f) => (
                   <Option key={f.id} value={f.id}>
                     {f.name}
@@ -468,13 +631,8 @@ const Add: React.FC = () => {
               </Select>
             </Form.Item>
 
-            {/* สาขา (กรองจากคณะที่เลือก) */}
-            <Form.Item
-              label="สาขา (Major)"
-              name="MajorID"
-              style={{ width: "100%" }}
-              rules={[{ required: false }]}
-            >
+            {/* สาขา */}
+            <Form.Item label="สาขา (Major)" name="MajorID" style={{ width: "100%" }}>
               <Select
                 placeholder="เลือกสาขา (ถ้ามี)"
                 loading={loadingMajors}
@@ -490,36 +648,93 @@ const Add: React.FC = () => {
               </Select>
             </Form.Item>
 
-            {/* เอกสารหลักสูตร (Book) */}
-            <Form.Item
-              label="เอกสารหลักสูตร (Book)"
-              name="BookID"
-              style={{ width: "100%" }}
-            >
-              <Select
-                placeholder="เลือกไฟล์เอกสารหลักสูตร (ถ้ามี)"
-                loading={loadingBooks}
-                style={{ maxWidth: 480 }}
-                allowClear
-                optionFilterProp="label"
-                showSearch
-              >
-                {books.map((b) => (
-                  <Option
-                    key={b.id}
-                    value={b.id}
-                    label={b.originalName ?? b.storedName ?? `ID ${b.id}`}
-                  >
-                    {(b.originalName ?? b.storedName ?? `ID ${b.id}`) +
-                      (b.publicPath ? ` — ${b.publicPath}` : "")}
-                  </Option>
-                ))}
-              </Select>
+            {/* เอกสารหลักสูตร — เลือกไฟล์ (ยังไม่อัปโหลด) + เปิดจากคอมพิวเตอร์ */}
+            <Form.Item label="เอกสารหลักสูตร (เลือกไฟล์ — เปิดดูจากคอมพิวเตอร์ได้ทันที)" style={{ width: "100%" }}>
+              <Upload.Dragger {...uploadProps} style={{ maxWidth: 560 }}>
+                <p className="ant-upload-drag-icon">📄</p>
+                <p className="ant-upload-text">ลากไฟล์มาวาง หรือคลิกเพื่อเลือกไฟล์</p>
+                <p className="ant-upload-hint">รองรับ .pdf .doc .docx .png .jpg (สูงสุด 20MB)</p>
+              </Upload.Dragger>
+
+              {/* แสดงไฟล์ที่เลือก (ยังไม่อัปโหลด) + ปุ่ม "เปิดจากคอมพิวเตอร์" */}
+              {uploadedPreview && (
+                <div style={{ marginTop: 12, maxWidth: 560 }}>
+                  <Alert
+                    showIcon
+                    type="info"
+                    message={
+                      <span>
+                        เลือกไฟล์แล้ว: <strong>{uploadedPreview.name}</strong>
+                      </span>
+                    }
+                    description={
+                      <div style={{ marginTop: 6, lineHeight: 1.7 }}>
+                        <div>ชนิดไฟล์: {uploadedPreview.mime || "-"}</div>
+                        <div>ขนาดไฟล์: {formatBytes(uploadedPreview.size)}</div>
+
+                        {localPreviewUrl ? (
+                          <div style={{ marginTop: 8, display: "flex", gap: 8, alignItems: "center" }}>
+                            <a href={localPreviewUrl} target="_blank" rel="noopener noreferrer">
+                              เปิดไฟล์จากคอมพิวเตอร์
+                            </a>
+                            <Button size="small" onClick={clearSelectedFile}>
+                              ล้างไฟล์ที่เลือก
+                            </Button>
+                          </div>
+                        ) : null}
+
+                        {/* พรีวิว inline เฉพาะ PDF/รูป */}
+                        {localPreviewUrl && canInlinePreview(uploadedPreview.mime) ? (
+                          <div style={{ marginTop: 12, border: "1px solid #eee", borderRadius: 8, overflow: "hidden" }}>
+                            {uploadedPreview.mime?.startsWith("image/") ? (
+                              <img
+                                src={localPreviewUrl}
+                                alt="local preview"
+                                style={{ display: "block", maxWidth: "100%", maxHeight: 480, objectFit: "contain" }}
+                              />
+                            ) : (
+                              <iframe
+                                src={localPreviewUrl}
+                                title="PDF preview"
+                                width="100%"
+                                height={480}
+                                style={{ border: "none" }}
+                              />
+                            )}
+                          </div>
+                        ) : null}
+
+                        <div style={{ marginTop: 6 }}>
+                          <em>หมายเหตุ: ไฟล์จะถูกอัปโหลดเมื่อกด “เพิ่มหลักสูตร” เท่านั้น</em>
+                        </div>
+                      </div>
+                    }
+                  />
+                </div>
+              )}
+
+              {/* ซ่อน BookID ไว้ในฟอร์ม (จะถูกตั้งค่าหลังอัปโหลดใน onFinish) */}
+              <Form.Item name="BookID" style={{ display: "none" }}>
+                <Input type="hidden" />
+              </Form.Item>
             </Form.Item>
 
             {/* คำอธิบาย */}
             <Form.Item label="คำอธิบาย (Description)" name="Description" style={{ width: "100%" }}>
               <Input.TextArea rows={4} placeholder="รายละเอียดอื่น ๆ ของหลักสูตร" style={{ maxWidth: 720 }} />
+            </Form.Item>
+
+            {/* ตำแหน่งไฟล์บนเครื่อง (optional) */}
+            <Form.Item
+              label="ตำแหน่งไฟล์บนเครื่อง (optional)"
+              name="LocalFilePath"
+              extra="เบราว์เซอร์จะไม่รู้ path จริงบนเครื่องโดยอัตโนมัติ หากต้องการเก็บในฐานข้อมูล กรุณากรอกด้วยตัวเอง"
+              style={{ width: "100%" }}
+            >
+              <Input
+                placeholder="เช่น C:\Users\me\Documents\curriculum.pdf หรือ /Users/me/Documents/curriculum.pdf"
+                style={{ maxWidth: 720 }}
+              />
             </Form.Item>
 
             {/* ปุ่มบันทึก */}
@@ -566,38 +781,28 @@ const Add: React.FC = () => {
                 title: "คณะ",
                 dataIndex: "FacultyName",
                 render: (_: unknown, row) =>
-                  row.FacultyName ??
-                  (faculties.find((f) => f.id === row.FacultyID)?.name || "-"),
+                  row.FacultyName ?? (faculties.find((f) => f.id === row.FacultyID)?.name || "-"),
                 width: 200,
               },
               {
                 title: "สาขา",
                 dataIndex: "MajorName",
                 render: (_: unknown, row) =>
-                  row.MajorName ??
-                  (majors.find((m) => m.id === row.MajorID)?.name || "-"),
+                  row.MajorName ?? (majors.find((m) => m.id === row.MajorID)?.name || "-"),
                 width: 200,
               },
+              { title: "คำอธิบาย", dataIndex: "Description", width: 220 },
               {
                 title: "เอกสาร",
-                dataIndex: "BookPath",
-                width: 120,
-                render: (p?: string) =>
-                  p ? (
-                    <a href={p} target="_blank" rel="noopener noreferrer">
-                      View
-                    </a>
-                  ) : (
-                    "-"
-                  ),
+                key: "local-open",
+                width: 200,
+                render: () => <LocalFileOpener />, // ✅ เปิดไฟล์จากคอมพิวเตอร์ (ไม่ใช้ API/URL)
               },
             ]}
             dataSource={tableRows}
             rowKey="CurriculumID"
             pagination={false}
-            rowClassName={(_record, index) =>
-              index % 2 === 0 ? "table-row-light" : "table-row-dark"
-            }
+            rowClassName={(_record, index) => (index % 2 === 0 ? "table-row-light" : "table-row-dark")}
           />
         </div>
 
@@ -623,7 +828,7 @@ const Add: React.FC = () => {
             .custom-table-header .ant-table-thead > tr > th:last-child {
               border-right: none;
             }
-            .custom-table-header .ant-table-tbody > tr:hover > td {
+            .custom-table-header .ant-table-tbody > tr > td:hover {
               background-color: #dad1d1ff !important;
               transition: background 0.2s;
             }
