@@ -261,12 +261,13 @@ const CHANGE: React.FC = () => {
     );
   }, [subjects, query]);
 
-  /* ---------- inline edit (name/credit/major) ---------- */
+  /* ---------- inline edit (id/name/credit/major) ---------- */
   const isEditing = (record: SubjectRow) =>
     (record.SubjectID ?? "") === editingKey;
 
   const edit = (record: SubjectRow) => {
     form.setFieldsValue({
+      SubjectID: record.SubjectID, // [CHANGE: SubjectID] ตั้งค่าให้แก้ไขได้
       SubjectName: record.SubjectName,
       Credit: Number(record.Credit ?? 0),
       MajorID: record.MajorID ?? "",
@@ -278,17 +279,24 @@ const CHANGE: React.FC = () => {
 
   const save = async (key: string) => {
     try {
+      // [CHANGE: SubjectID] รวม SubjectID ใน validateFields เพื่ออ่านค่ารหัสใหม่
       const row = (await form.validateFields()) as Pick<
         SubjectInterface,
-        "SubjectName" | "Credit" | "MajorID"
+        "SubjectName" | "Credit" | "MajorID" | "SubjectID"
       >;
 
+      const newId = String(row.SubjectID ?? "").trim(); // รหัสใหม่ (ถ้ามีการแก้)
       setSubmitting(true);
 
+      // [CHANGE: SubjectID] ถ้ารหัสเปลี่ยน ส่งทั้ง subject_id และ new_subject_id
+      // เพื่อรองรับหลายรูปแบบ backend (อันที่ไม่รองรับจะถูกเพิกเฉย)
       await updateSubject(key, {
         subject_name: row.SubjectName ?? "",
         credit: Number(row.Credit ?? 0),
         major_id: row.MajorID ?? "",
+        ...(newId && newId !== key
+          ? { subject_id: newId, new_subject_id: newId }
+          : {}),
       });
 
       message.success("บันทึกการแก้ไขวิชาสำเร็จ");
@@ -437,7 +445,13 @@ const CHANGE: React.FC = () => {
   }
 
   const columns: EditableColumnType[] = [
-    { title: "รหัสวิชา", dataIndex: "SubjectID", width: "10%" },
+    {
+      title: "รหัสวิชา",
+      dataIndex: "SubjectID",
+      width: "10%",
+      editable: true, // [CHANGE: SubjectID] ทำให้คอลัมน์นี้แก้ไขได้
+      inputType: "text", // [CHANGE: SubjectID] ใช้กล่องข้อความ
+    },
     {
       title: "ชื่อรายวิชา",
       dataIndex: "SubjectName",
@@ -607,6 +621,7 @@ const CHANGE: React.FC = () => {
 
     // map dataIndex ของคอลัมน์ -> ชื่อฟิลด์ที่ใช้ในฟอร์ม
     const nameMap: Record<string, string> = {
+      SubjectID: "SubjectID", // [CHANGE: SubjectID] ให้ฟอร์มคุมรหัสวิชา
       SubjectName: "SubjectName",
       Credit: "Credit",
       MajorName: "MajorID", // แก้ผ่าน MajorID (ส่ง id)
@@ -636,6 +651,31 @@ const CHANGE: React.FC = () => {
                   ]
                 : fieldName === "MajorID"
                 ? [{ required: true, message: "กรุณาเลือกสาขา" }]
+                : fieldName === "SubjectID"
+                ? [
+                    // [VALIDATE: SubjectID] ต้องกรอกรหัส
+                    { required: true, message: "กรุณากรอกรหัสวิชา" },
+                    // [VALIDATE: SubjectID] รูปแบบอนุญาต A–Z, a–z, 0–9, และขีดกลาง
+                    {
+                      pattern: /^[A-Za-z0-9-]+$/,
+                      message: "ใช้ได้เฉพาะตัวอักษร/ตัวเลข/ขีดกลาง (-)",
+                    },
+                    // [VALIDATE: SubjectID] เช็คไม่ให้ซ้ำกับรายวิชาอื่น
+                    {
+                      validator: async (_rule, value) => {
+                        const v = String(value ?? "").trim();
+                        if (!v) return;
+                        const isSame = v === (record.SubjectID ?? "").trim();
+                        if (isSame) return;
+                        const duplicated = subjects.some(
+                          (s) => (s.SubjectID ?? "").trim() === v
+                        );
+                        if (duplicated) {
+                          throw new Error("รหัสวิชานี้มีอยู่แล้ว");
+                        }
+                      },
+                    },
+                  ]
                 : undefined
             }
           >

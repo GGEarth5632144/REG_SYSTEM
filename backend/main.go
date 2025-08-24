@@ -106,20 +106,27 @@ func main() {
 		statusGroup.POST("/", status.CreateStatus)
 	}
 
-	// -------------------- Curriculums --------------------
-	curriculumGroup := r.Group("/curriculums")
-	{
-		curriculumGroup.GET("/", curriculum.GetCurriculumAll)
-		curriculumGroup.POST("/", curriculum.CreateCurriculum)
-	}
+// -------------------- Curriculums --------------------
+curriculumGroup := r.Group("/curriculums")
+{
+    curriculumGroup.GET("/", curriculum.GetCurriculumAll)         // GET /curriculums
+    curriculumGroup.GET("/:curriculumId", curriculum.GetCurriculumByID) // GET /curriculums/:id
+    curriculumGroup.POST("/", curriculum.CreateCurriculum)        // POST /curriculums
+    curriculumGroup.PUT("/:curriculumId", curriculum.UpdateCurriculum)  // PUT /curriculums/:id
+    curriculumGroup.PATCH("/:curriculumId", curriculum.UpdateCurriculum) // PATCH /curriculums/:id
+    curriculumGroup.DELETE("/:curriculumId", curriculum.DeleteCurriculum) // DELETE /curriculums/:id
+}
 
-	// -------------------- Books (files) --------------------
-	bookGroup := r.Group("/books")
-	{
-		bookGroup.GET("/", curriculum.GetBookPathAll)
-		bookGroup.GET("/:filename", curriculum.ShowBookFile)
-		bookGroup.POST("/", curriculum.UploadBookFile)
-	}
+// -------------------- Books (files) --------------------
+bookGroup := r.Group("/books")
+{
+    bookGroup.GET("/", curriculum.GetBookPathAll)      // GET /books
+    bookGroup.GET("/:id", curriculum.GetBookPathByID)  // GET /books/:id (อ่าน metadata ไฟล์)
+    bookGroup.POST("/upload", curriculum.UploadBookFile) // POST /books/upload (อัปโหลดไฟล์)
+    bookGroup.GET("/download/:id", curriculum.DownloadBookFile) // GET /books/download/:id (ดาวน์โหลดไฟล์)
+    bookGroup.DELETE("/:id", curriculum.DeleteBookFile) // DELETE /books/:id (ลบไฟล์ + metadata)
+}
+
 
 	// -------------------- Subjects & Study Times --------------------
 	subjectGroup := r.Group("/subjects")

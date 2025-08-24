@@ -1,4 +1,8 @@
-import React, { useState } from "react";
+// ====================================================================
+// CHANGE.tsx — ดึง/แก้/ลบ "หลักสูตร" จาก backend จริง (พร้อมคอมเมนต์ไทย)
+// ====================================================================
+
+import React, { useEffect, useMemo, useState, useContext } from "react";
 import {
   Layout,
   Form,
@@ -8,89 +12,174 @@ import {
   Table,
   Typography,
   Select,
+  message,
 } from "antd";
 import type { ColumnsType, ColumnType } from "antd/es/table";
 import { SearchOutlined } from "@ant-design/icons";
 
 const { Content } = Layout;
 
+// ====================== 1) แบบข้อมูลที่ใช้บนตาราง (Frontend) ======================
 interface DataType {
-  key: string;
-  name: string;
-  credit: number;
-  startYear: number;
-  facultyId: string;
-  subjectIds: string[];
-  syllabusUrl: string;
+  key: string; // ใช้กับ Table
+  id: string; // curriculum_id จากหลังบ้าน
+  name: string; // curriculum_name
+  credit: number; // total_credit
+  startYear: number; // start_year
+  facultyId: string; // faculty_id
+  subjectIds: string[]; // (ใช้แสดงเฉยๆ ถ้ามี)
+  syllabusUrl: string; // (book_path เพื่อแสดง View)
 }
 
+// ====== ใช้กำหนดชนิดคอลัมน์ editable ของ AntD Table ======
 interface EditableColumnType extends ColumnType<DataType> {
   editable?: boolean;
   inputType?: "number" | "text" | "select" | "multiselect";
 }
 
-const faculties = [
-  { id: "fac-1", name: "Engineering" },
-  { id: "fac-2", name: "Science" },
-  { id: "fac-3", name: "Arts" },
-];
+// ====================== 2) Services (เรียก API) ======================
+// NOTE: ปรับ path import ให้ตรงโปรเจ็กต์จริงของคุณ
+import { getFacultyAll } from "../../../../../services/https/faculty/faculty";
+import { getSubjectAll } from "../../../../../services/https/subject/subjects";
+import {
+  getCurriculumAll,
+  updateCurriculum, // (id: string, dto: Partial<CurriculumUpdateDTO>)
+  deleteCurriculum, // (id: string)
+} from "../../../../../services/https/curriculum/curriculum";
 
-const facultyMap = faculties.reduce((acc, cur) => {
-  acc[cur.id] = cur.name;
-  return acc;
-}, {} as Record<string, string>);
+// ====== DTO ฝั่ง FE สำหรับส่งอัปเดตให้ backend (ให้คีย์ตรงกับ Go) ======
+type CurriculumUpdateDTO = Partial<{
+  curriculum_name: string;
+  total_credit: number;
+  start_year: number;
+  faculty_id: string;
+  major_id: string;
+  book_id: number;
+  description: string;
+}>;
 
-const subjects = [
-  { id: "sub-1", name: "Algorithms" },
-  { id: "sub-2", name: "Databases" },
-  { id: "sub-3", name: "Calculus" },
-  { id: "sub-4", name: "Physics" },
-];
+// ====================== 3) Normalizer: แปลง backend → frontend ======================
+type FacultyOpt = { id: string; name: string };
+type SubjectOpt = { id: string; name: string };
 
-const subjectMap = subjects.reduce((acc, cur) => {
-  acc[cur.id] = cur.name;
-  return acc;
-}, {} as Record<string, string>);
+// แปลง faculty จาก API → option
+const toFacultyOpt = (raw: unknown): FacultyOpt => {
+  const r = raw as Record<string, unknown>;
+  return {
+    id: String(r.id ?? r.FacultyID ?? r.facultyId ?? r.faculty_id ?? ""),
+    name: String(
+      r.name ?? r.FacultyName ?? r.facultyName ?? r.faculty_name ?? ""
+    ),
+  };
+};
 
-const originData: DataType[] = [
-  {
-    key: "1",
-    name: "Computer Science",
-    credit: 120,
-    startYear: 2020,
-    facultyId: "fac-1",
-    subjectIds: ["sub-1", "sub-2"],
-    syllabusUrl: "https://example.com/cs.pdf",
-  },
-  {
-    key: "2",
-    name: "Mathematics",
-    credit: 110,
-    startYear: 2019,
-    facultyId: "fac-2",
-    subjectIds: ["sub-3"],
-    syllabusUrl: "https://example.com/math.pdf",
-  },
-  {
-    key: "3",
-    name: "Physics",
-    credit: 130,
-    startYear: 2021,
-    facultyId: "fac-3",
-    subjectIds: ["sub-4"],
-    syllabusUrl: "https://example.com/physics.pdf",
-  },
-];
+// แปลง subject จาก API → option
+const toSubjectOpt = (raw: unknown): SubjectOpt => {
+  const r = raw as Record<string, unknown>;
+  return {
+    id: String(r.id ?? r.SubjectID ?? r.subjectId ?? r.subject_id ?? ""),
+    name: String(
+      r.name ?? r.SubjectName ?? r.subjectName ?? r.subject_name ?? ""
+    ),
+  };
+};
 
-interface EditableCellProps
-  extends Omit<React.HTMLAttributes<HTMLElement>, "title"> {
-  /** props ที่ onCell จะส่งให้เซลล์ */
+// ---------- helpers: type-safe extractors ----------
+const pickString = (
+  o: Record<string, unknown>,
+  keys: string[],
+  def = ""
+): string => {
+  for (const k of keys) {
+    const v = o[k];
+    if (typeof v === "string" || typeof v === "number") return String(v);
+  }
+  return def;
+};
+
+const pickNumber = (
+  o: Record<string, unknown>,
+  keys: string[],
+  def = 0
+): number => {
+  for (const k of keys) {
+    const v = o[k];
+    if (typeof v === "number" && Number.isFinite(v)) return v;
+    if (typeof v === "string") {
+      const n = Number(v);
+      if (Number.isFinite(n)) return n;
+    }
+  }
+  return def;
+};
+
+const pickArray = (o: Record<string, unknown>, keys: string[]): unknown[] => {
+  for (const k of keys) {
+    const v = o[k];
+    if (Array.isArray(v)) return v as unknown[];
+  }
+  return [];
+};
+
+const toStringId = (x: unknown): string => {
+  if (typeof x === "string" || typeof x === "number") return String(x);
+  if (typeof x === "object" && x !== null) {
+    const rec = x as Record<string, unknown>;
+    if (typeof rec.id === "string" || typeof rec.id === "number")
+      return String(rec.id);
+    if (typeof rec.SubjectID === "string" || typeof rec.SubjectID === "number")
+      return String(rec.SubjectID);
+    if (
+      typeof rec.subject_id === "string" ||
+      typeof rec.subject_id === "number"
+    )
+      return String(rec.subject_id);
+  }
+  return "";
+};
+
+// ---------- toCurriculumRow: ไม่มี any ----------
+const toCurriculumRow = (raw: unknown): DataType => {
+  const r = (raw ?? {}) as Record<string, unknown>;
+  const subjectList = pickArray(r, ["subjectIds", "subjects"])
+    .map(toStringId)
+    .filter(Boolean);
+
+  return {
+    key: pickString(
+      r,
+      ["curriculum_id", "CurriculumID", "id"],
+      String(Date.now())
+    ),
+    id: pickString(r, ["curriculum_id", "CurriculumID", "id"], ""),
+    name: pickString(r, ["curriculum_name", "CurriculumName", "name"], ""),
+    credit: pickNumber(r, ["total_credit", "TotalCredit", "credit"], 0),
+    startYear: pickNumber(r, ["start_year", "StartYear", "startYear"], 0),
+    facultyId: pickString(r, ["faculty_id", "FacultyID"], ""),
+    subjectIds: subjectList,
+    syllabusUrl: pickString(r, ["book_path", "syllabusUrl", "url"], ""),
+  };
+};
+
+// ====================== 4) Context สำหรับ options ของ Select ======================
+const OptionsCtx = React.createContext<{
+  faculties: FacultyOpt[];
+  subjects: SubjectOpt[];
+}>({
+  faculties: [],
+  subjects: [],
+});
+
+// ====================== 5) Editable Cell (ควบคุม input ต่อเซลล์) ======================
+// ❗️อย่า extends HTMLAttributes เพราะ title:string ทำให้ชนกับ ReactNode ของ AntD
+type EditableCellProps = {
   record: DataType;
   editing: boolean;
   dataIndex: keyof DataType;
-  title: React.ReactNode; // ใช้ชื่อ title ให้ตรงกับตัวอย่างของ antd
+  title: React.ReactNode;
   inputType: "number" | "text" | "select" | "multiselect";
-}
+  children?: React.ReactNode;
+};
 
 const EditableCell: React.FC<EditableCellProps> = ({
   editing,
@@ -100,12 +189,14 @@ const EditableCell: React.FC<EditableCellProps> = ({
   children,
   ...restProps
 }) => {
+  const { faculties, subjects } = useContext(OptionsCtx);
+
+  // เลือกชนิด input ตามคอลัมน์
   let inputNode: React.ReactNode;
-  if (inputType === "number") {
+  if (inputType === "number")
     inputNode = <InputNumber style={{ width: "100%" }} />;
-  } else if (inputNode === "text") {
-    inputNode = <Input />;
-  } else if (inputType === "select") {
+  else if (inputType === "text") inputNode = <Input />;
+  else if (inputType === "select")
     inputNode = (
       <Select
         options={faculties.map((f) => ({ label: f.name, value: f.id }))}
@@ -114,7 +205,7 @@ const EditableCell: React.FC<EditableCellProps> = ({
         allowClear
       />
     );
-  } else if (inputType === "multiselect") {
+  else if (inputType === "multiselect")
     inputNode = (
       <Select
         mode="multiple"
@@ -124,12 +215,10 @@ const EditableCell: React.FC<EditableCellProps> = ({
         allowClear
       />
     );
-  } else {
-    inputNode = <Input />;
-  }
+  else inputNode = <Input />;
 
   return (
-    <td {...restProps}>
+    <td {...(restProps as React.HTMLAttributes<HTMLTableCellElement>)}>
       {editing ? (
         <Form.Item
           name={dataIndex}
@@ -145,65 +234,134 @@ const EditableCell: React.FC<EditableCellProps> = ({
   );
 };
 
+// ====================== 6) Component หลัก ======================
 const CHANGE: React.FC = () => {
   const [form] = Form.useForm();
-  const [data, setData] = useState<DataType[]>(originData);
+
+  // ------- data & options state -------
+  const [data, setData] = useState<DataType[]>([]);
+  const [faculties, setFaculties] = useState<FacultyOpt[]>([]);
+  const [subjects, setSubjects] = useState<SubjectOpt[]>([]);
+
+  // ------- ui state -------
+  const [loading, setLoading] = useState(false);
   const [editingKey, setEditingKey] = useState<React.Key>("");
-  const [searchText, setSearchText] = useState("");
+  const [searchText, setSearchText] = useState<string>("");
+
+  // map สำหรับแปลง id → ชื่อเวลา render
+  const facultyMap = useMemo(
+    () =>
+      faculties.reduce(
+        (acc, cur) => ({ ...acc, [cur.id]: cur.name }),
+        {} as Record<string, string>
+      ),
+    [faculties]
+  );
+  const subjectMap = useMemo(
+    () =>
+      subjects.reduce(
+        (acc, cur) => ({ ...acc, [cur.id]: cur.name }),
+        {} as Record<string, string>
+      ),
+    [subjects]
+  );
 
   const isEditing = (record: DataType) => record.key === editingKey;
 
-  const edit = (record: Partial<DataType> & { key: React.Key }) => {
+  // ------- โหลดข้อมูลจริงทั้งหมด -------
+  const loadAll = async () => {
+    setLoading(true);
+    try {
+      const [facRes, subRes, curRes] = await Promise.all([
+        getFacultyAll(),
+        getSubjectAll(),
+        getCurriculumAll(),
+      ]);
+      setFaculties((Array.isArray(facRes) ? facRes : []).map(toFacultyOpt));
+      setSubjects((Array.isArray(subRes) ? subRes : []).map(toSubjectOpt));
+      setData((Array.isArray(curRes) ? curRes : []).map(toCurriculumRow));
+    } catch (err) {
+      console.error(err);
+      message.error("โหลดข้อมูลล้มเหลว");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadAll();
+  }, []);
+
+  // ------- ฟังก์ชันแก้ไขแถว -------
+  const edit = (record: DataType) => {
     form.setFieldsValue({
-      name: "",
-      credit: 0,
-      startYear: 0,
-      facultyId: "",
-      subjectIds: [],
-      syllabusUrl: "",
-      ...record,
+      name: record.name,
+      credit: record.credit,
+      startYear: record.startYear,
+      facultyId: record.facultyId,
+      subjectIds: record.subjectIds,
+      syllabusUrl: record.syllabusUrl,
     });
     setEditingKey(record.key);
   };
 
-  const cancel = () => {
-    setEditingKey("");
-  };
+  const cancel = () => setEditingKey("");
 
+  // บันทึกแก้ไข → map เป็น DTO ให้ตรง API แล้วค่อยส่ง
   const save = async (key: React.Key) => {
     try {
       const row = (await form.validateFields()) as Partial<DataType>;
-      const newData = [...data];
-      const index = newData.findIndex((item) => key === item.key);
+      const current = data.find((d) => d.key === key);
+      if (!current) return;
 
-      if (index > -1) {
-        const item = newData[index];
-        newData.splice(index, 1, { ...item, ...row } as DataType);
-        setData(newData);
-        setEditingKey("");
-      } else {
-        newData.push({ ...(row as Omit<DataType, "key">), key: String(key) });
-        setData(newData);
-        setEditingKey("");
-      }
-    } catch (errInfo) {
-      console.log("Validate Failed:", errInfo);
+      const dto: CurriculumUpdateDTO = {
+        curriculum_name: row.name ?? current.name,
+        total_credit: row.credit ?? current.credit,
+        start_year: row.startYear ?? current.startYear,
+        faculty_id: row.facultyId ?? current.facultyId,
+      };
+
+      await updateCurriculum(current.id, dto);
+
+      setData((prev) =>
+        prev.map((it) => (it.key === key ? { ...it, ...row } : it))
+      );
+      setEditingKey("");
+      message.success("บันทึกสำเร็จ");
+    } catch (err) {
+      console.error(err);
+      message.error("บันทึกไม่สำเร็จ");
     }
   };
 
-  const handleDelete = (key: React.Key) => {
-    const newData = data.filter((item) => item.key !== key);
-    setData(newData);
+  // ลบแถวจริงจาก backend + ลบในตาราง
+  const handleDelete = async (key: React.Key) => {
+    const target = data.find((d) => d.key === key);
+    if (!target) return;
+    try {
+      await deleteCurriculum(target.id);
+      setData((prev) => prev.filter((item) => item.key !== key));
+      message.success("ลบสำเร็จ");
+    } catch (err) {
+      console.error(err);
+      message.error("ลบไม่สำเร็จ");
+    }
   };
 
-  const filteredData = data.filter(
-    (item) =>
-      item.name.toLowerCase().includes(searchText.toLowerCase()) ||
-      (facultyMap[item.facultyId] || "")
-        .toLowerCase()
-        .includes(searchText.toLowerCase())
+  // กรองข้อมูลตามคำค้นหา
+  const filteredData = useMemo(
+    () =>
+      data.filter(
+        (item) =>
+          item.name.toLowerCase().includes(searchText.toLowerCase()) ||
+          (facultyMap[item.facultyId] || "")
+            .toLowerCase()
+            .includes(searchText.toLowerCase())
+      ),
+    [data, facultyMap, searchText]
   );
 
+  // ------- คอลัมน์ตาราง -------
   const columns: EditableColumnType[] = [
     {
       title: "Curriculum Name",
@@ -218,7 +376,7 @@ const CHANGE: React.FC = () => {
       editable: true,
     },
     {
-      title: "Curriculum Start Year",
+      title: "Start Year",
       dataIndex: "startYear",
       width: "15%",
       editable: true,
@@ -228,18 +386,18 @@ const CHANGE: React.FC = () => {
       dataIndex: "facultyId",
       width: "15%",
       editable: true,
-      render: (facultyId: string) => facultyMap[facultyId] || facultyId,
+      render: (facultyId: string) => facultyMap[facultyId] || "-",
     },
     {
-      title: "Subjects in Curriculum",
+      title: "Subjects",
       dataIndex: "subjectIds",
       width: "20%",
       editable: true,
-      render: (subjectIds: string[]) =>
-        subjectIds.map((id) => subjectMap[id] || id).join(", "),
+      render: (ids: string[]) =>
+        (ids || []).map((id) => subjectMap[id] || id).join(", "),
     },
     {
-      title: "Curriculum Book",
+      title: "Book",
       dataIndex: "syllabusUrl",
       width: "10%",
       editable: true,
@@ -248,7 +406,9 @@ const CHANGE: React.FC = () => {
           <a href={url} target="_blank" rel="noopener noreferrer">
             View
           </a>
-        ) : null,
+        ) : (
+          "-"
+        ),
     },
     {
       title: "Edit",
@@ -260,12 +420,12 @@ const CHANGE: React.FC = () => {
           <span>
             <Typography.Link
               onClick={() => save(record.key)}
-              style={{ marginInlineEnd: 8, fontSize: "10px" }}
+              style={{ marginInlineEnd: 8, fontSize: 12 }}
             >
               Save
             </Typography.Link>
             <Popconfirm title="Sure to cancel?" onConfirm={cancel}>
-              <a style={{ fontSize: "10px" }}>Cancel</a>
+              <a style={{ fontSize: 12 }}>Cancel</a>
             </Popconfirm>
           </span>
         ) : (
@@ -293,89 +453,69 @@ const CHANGE: React.FC = () => {
     },
   ];
 
-  // ✅ แก้ชนิด onCell ให้ตรงกับ antd (cast เป็น HTMLAttributes & EditableCellProps)
-  const mergedColumns: ColumnsType<DataType> = columns.map((col) => {
-    if (!col.editable) return col;
+  // ----- แยกชนิดคอลัมน์ที่เป็น data column (ไม่ใช่ group) ก่อนใช้ dataIndex -----
+  type DataColumn = Extract<
+    ColumnsType<DataType>[number],
+    ColumnType<DataType>
+  > & {
+    editable?: boolean;
+  };
+  const isDataColumn = (
+    col: ColumnsType<DataType>[number]
+  ): col is DataColumn => (col as ColumnType<DataType>).dataIndex !== undefined;
 
+  // ----- ผูก onCell สำหรับ editable (คืน HTMLAttributes แต่สอดไส้ props ให้ EditableCell) -----
+  const mergedColumns: ColumnsType<DataType> = columns.map((col) => {
+    if (!isDataColumn(col) || !col.editable) return col;
+
+    const getInputType = (dataIndex: keyof DataType) =>
+      dataIndex === "credit" || dataIndex === "startYear"
+        ? "number"
+        : dataIndex === "facultyId"
+        ? "select"
+        : dataIndex === "subjectIds"
+        ? "multiselect"
+        : "text";
+
+    // cast ผ่าน unknown เพื่อเลี่ยง any และให้ TS ยอมรับ HTMLAttributes
     return {
       ...col,
       onCell: (record: DataType) =>
         ({
           record,
-          inputType:
-            col.dataIndex === "credit" || col.dataIndex === "startYear"
-              ? "number"
-              : col.dataIndex === "facultyId"
-              ? "select"
-              : col.dataIndex === "subjectIds"
-              ? "multiselect"
-              : "text",
+          inputType: getInputType(col.dataIndex as keyof DataType),
           dataIndex: col.dataIndex as keyof DataType,
           title: col.title as React.ReactNode,
-          editing: isEditing(record),
-        } as React.HTMLAttributes<HTMLElement> & EditableCellProps),
-    };
+          editing: record.key === editingKey,
+        } as unknown as React.HTMLAttributes<HTMLTableCellElement>),
+    } as ColumnType<DataType>;
   });
 
+  // ====================== 7) Render ======================
   return (
     <Layout style={{ minHeight: "100vh" }}>
-      <Content style={{ padding: "24px" }}>
-        <style>
-          {`
-            .table-row-light {
-              background-color: #dad1d1ff;
-            }
-            .table-row-dark {
-              background-color: #dad1d1ff;
-            }
-            .custom-table-header .ant-table-thead > tr > th {
-              background: #2e236c;
-              color: #fff;
-              font-weight: bold;
-              font-size: 16px;
-              border-bottom: 2px solid #ffffffff;
-              border-right: 2px solid #ffffffff;
-            }
-            .custom-table-header .ant-table-tbody > tr > td {
-              border-bottom: 2px solid #ffffffff;
-              border-right: 2px solid #ffffffff;
-            }
-            .custom-table-header .ant-table-tbody > tr > td:last-child {
-              border-right: none;
-            }
-            .custom-table-header .ant-table-thead > tr > th {
-              border-right: 2px solid #ffffffff;
-            }
-            .custom-table-header .ant-table-thead > tr > th:last-child {
-              border-right: none;
-            }
-            .custom-table-header .ant-table-tbody > tr:hover > td {
-              background-color: #dad1d1ff !important;
-              transition: background 0.2s;
-            }
-          `}
-        </style>
-        <Form form={form} component={false}>
-          <Input
-            placeholder="Search curriculum or faculty"
-            value={searchText}
-            onChange={(e) => setSearchText(e.target.value)}
-            style={{ marginBottom: 16, width: 300, height: 40, fontSize: 16 }}
-            prefix={<SearchOutlined />}
-            allowClear
-          />
-          <Table<DataType>
-            components={{ body: { cell: EditableCell } }}
-            bordered
-            dataSource={filteredData}
-            columns={mergedColumns}
-            rowClassName={(_record, index) =>
-              index % 2 === 0 ? "table-row-light" : "table-row-dark"
-            }
-            className="custom-table-header"
-            pagination={{ onChange: cancel }}
-          />
-        </Form>
+      <Content style={{ padding: 24 }}>
+        <OptionsCtx.Provider value={{ faculties, subjects }}>
+          <Form form={form} component={false}>
+            <Input
+              placeholder="Search curriculum or faculty"
+              value={searchText}
+              onChange={(e) => setSearchText(e.target.value)}
+              style={{ marginBottom: 16, width: 320 }}
+              prefix={<SearchOutlined />}
+              allowClear
+            />
+            <Table<DataType>
+              components={{ body: { cell: EditableCell } }}
+              bordered
+              dataSource={filteredData}
+              columns={mergedColumns}
+              rowKey="key"
+              loading={loading}
+              pagination={{ onChange: () => setEditingKey("") }}
+            />
+          </Form>
+        </OptionsCtx.Provider>
       </Content>
     </Layout>
   );
