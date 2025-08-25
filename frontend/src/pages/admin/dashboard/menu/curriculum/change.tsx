@@ -1,5 +1,5 @@
 // ====================================================================
-// CHANGE.tsx — ดึง/แก้/ลบ "หลักสูตร" จาก backend จริง (พร้อมคอมเมนต์ไทย)
+// CHANGE.tsx — ดึง/แก้/ลบ "หลักสูตร" + จัดรายการวิชาในหลักสูตร (ไม่ใช้ PK link)
 // ====================================================================
 
 import React, { useEffect, useMemo, useState, useContext } from "react";
@@ -21,14 +21,14 @@ const { Content } = Layout;
 
 // ====================== 1) แบบข้อมูลที่ใช้บนตาราง (Frontend) ======================
 interface DataType {
-  key: string; // ใช้กับ Table
-  id: string; // curriculum_id จากหลังบ้าน
+  key: string;
+  id: string; // curriculum_id
   name: string; // curriculum_name
   credit: number; // total_credit
   startYear: number; // start_year
   facultyId: string; // faculty_id
-  subjectIds: string[]; // (ใช้แสดงเฉยๆ ถ้ามี)
-  syllabusUrl: string; // (book_path เพื่อแสดง View)
+  subjectIds: string[]; // วิชาของหลักสูตร
+  syllabusUrl: string; // book_path
 }
 
 // ====== ใช้กำหนดชนิดคอลัมน์ editable ของ AntD Table ======
@@ -38,21 +38,26 @@ interface EditableColumnType extends ColumnType<DataType> {
 }
 
 // ====================== 2) Services (เรียก API) ======================
-// NOTE: ปรับ path import ให้ตรงโปรเจ็กต์จริงของคุณ
+// NOTE: ปรับ path import ให้ตรงโปรเจ็กต์จริงของคุณ (ตัวพิมพ์เล็ก/ใหญ่ต้องตรง)
+import {
+  getSubjectCurriculumAll,
+  createSubjectCurriculum,
+  deleteSubjectCurriculumByPair,
+} from "../../../../../services/https/SubjectCurriculum/subjectcurriculum";
+import type { SubjectCurriculumInterface } from "../../../../../interfaces/SubjectCurriculum";
 import { getFacultyAll } from "../../../../../services/https/faculty/faculty";
 import { getSubjectAll } from "../../../../../services/https/subject/subjects";
 import type { CurriculumUpdateDTO } from "../../../../../services/https/curriculum/curriculum";
 import {
   getCurriculumAll,
-  updateCurriculum, // (id: string, dto: Partial<CurriculumUpdateDTO>)
-  deleteCurriculum, // (id: string)
+  updateCurriculum,
+  deleteCurriculum,
 } from "../../../../../services/https/curriculum/curriculum";
 
-// ====================== 3) Normalizer: แปลง backend → frontend ======================
+// ====================== 3) Normalizer / helpers ======================
 type FacultyOpt = { id: string; name: string };
 type SubjectOpt = { id: string; name: string };
 
-// แปลง faculty จาก API → option
 const toFacultyOpt = (raw: unknown): FacultyOpt => {
   const r = raw as Record<string, unknown>;
   return {
@@ -63,18 +68,20 @@ const toFacultyOpt = (raw: unknown): FacultyOpt => {
   };
 };
 
-// แปลง subject จาก API → option
 const toSubjectOpt = (raw: unknown): SubjectOpt => {
   const r = raw as Record<string, unknown>;
-  return {
-    id: String(r.id ?? r.SubjectID ?? r.subjectId ?? r.subject_id ?? ""),
-    name: String(
-      r.name ?? r.SubjectName ?? r.subjectName ?? r.subject_name ?? ""
-    ),
-  };
+  const id = String(
+    r.subject_id ?? r.SubjectID ?? r.subject_code ?? r.SubjectCode ?? r.id ?? ""
+  );
+  const name = String(
+    r.subject_name ?? r.SubjectName ?? r.name ?? r.title ?? r.Title ?? ""
+  );
+  return { id, name };
 };
 
-// ---------- helpers: type-safe extractors ----------
+const asStringArray = (v: unknown): string[] =>
+  Array.isArray(v) ? v.map((x) => String(x)).filter(Boolean) : [];
+
 const pickString = (
   o: Record<string, unknown>,
   keys: string[],
@@ -128,7 +135,7 @@ const toStringId = (x: unknown): string => {
   return "";
 };
 
-// ---------- toCurriculumRow: ไม่มี any ----------
+// แปลง curriculum จาก BE → row ของตาราง
 const toCurriculumRow = (raw: unknown): DataType => {
   const r = (raw ?? {}) as Record<string, unknown>;
   const subjectList = pickArray(r, ["subjectIds", "subjects"])
@@ -160,8 +167,7 @@ const OptionsCtx = React.createContext<{
   subjects: [],
 });
 
-// ====================== 5) Editable Cell (ควบคุม input ต่อเซลล์) ======================
-// ❗️อย่า extends HTMLAttributes เพราะ title:string ทำให้ชนกับ ReactNode ของ AntD
+// ====================== 5) Editable Cell ======================
 type EditableCellProps = {
   record: DataType;
   editing: boolean;
@@ -181,7 +187,6 @@ const EditableCell: React.FC<EditableCellProps> = ({
 }) => {
   const { faculties, subjects } = useContext(OptionsCtx);
 
-  // เลือกชนิด input ตามคอลัมน์
   let inputNode: React.ReactNode;
   if (inputType === "number")
     inputNode = <InputNumber style={{ width: "100%" }} />;
@@ -262,14 +267,48 @@ const CHANGE: React.FC = () => {
   const loadAll = async () => {
     setLoading(true);
     try {
-      const [facRes, subRes, curRes] = await Promise.all([
+      const [facRes, subRes, curRes, scRes] = await Promise.all([
         getFacultyAll(),
         getSubjectAll(),
         getCurriculumAll(),
+        getSubjectCurriculumAll(), // ลิงก์ทั้งหมด
       ]);
+
       setFaculties((Array.isArray(facRes) ? facRes : []).map(toFacultyOpt));
       setSubjects((Array.isArray(subRes) ? subRes : []).map(toSubjectOpt));
-      setData((Array.isArray(curRes) ? curRes : []).map(toCurriculumRow));
+
+      // index: curriculumId -> Set(subjectId)
+      // สร้าง index: curriculumId (หรือ majorId) -> Set(subjectId)
+      const idx: Record<string, Set<string>> = {};
+      for (const link of (Array.isArray(scRes)
+        ? scRes
+        : []) as SubjectCurriculumInterface[]) {
+        const rec = link as unknown as Record<string, unknown>;
+        const cId = pickString(
+          rec,
+          ["curriculum_id", "CurriculumID", "major_id", "MajorID"],
+          ""
+        );
+        const sId = pickString(
+          rec,
+          ["subject_id", "SubjectID", "subject_code", "SubjectCode"],
+          ""
+        );
+        if (!cId || !sId) continue;
+        if (!idx[cId]) idx[cId] = new Set<string>();
+        idx[cId].add(sId);
+      }
+
+      // แปลง curriculum → row + เติม subjectIds จาก idx
+      const baseRows = (Array.isArray(curRes) ? curRes : []).map(
+        toCurriculumRow
+      );
+      const rowsWithSubjects = baseRows.map((it) => ({
+        ...it,
+        subjectIds: Array.from(idx[it.id] ?? new Set<string>()),
+      }));
+
+      setData(rowsWithSubjects);
     } catch (err) {
       console.error(err);
       message.error("โหลดข้อมูลล้มเหลว");
@@ -281,6 +320,35 @@ const CHANGE: React.FC = () => {
   useEffect(() => {
     loadAll();
   }, []);
+
+  // ------- วางฟังก์ชันรีเฟรช “ภายใน” component ให้ใช้ setData ได้ -------
+  const refreshSubjectsFor = async (curriculumId: string): Promise<void> => {
+    const allLinks = await getSubjectCurriculumAll();
+    const ids = (Array.isArray(allLinks) ? allLinks : [])
+      .map((x) => x as unknown as Record<string, unknown>)
+      .filter((rec) => {
+        const cid = pickString(
+          rec,
+          ["curriculum_id", "CurriculumID", "major_id", "MajorID"],
+          ""
+        );
+        return cid === curriculumId;
+      })
+      .map((rec) =>
+        pickString(
+          rec,
+          ["subject_id", "SubjectID", "subject_code", "SubjectCode"],
+          ""
+        )
+      )
+      .filter(Boolean);
+
+    setData((prev) =>
+      prev.map((it) =>
+        it.id === curriculumId ? { ...it, subjectIds: ids } : it
+      )
+    );
+  };
 
   // ------- ฟังก์ชันแก้ไขแถว -------
   const edit = (record: DataType) => {
@@ -304,27 +372,52 @@ const CHANGE: React.FC = () => {
       const current = data.find((d) => d.key === key);
       if (!current) return;
 
-      // สร้าง patch เป็น snake_case ให้ตรงกับ CurriculumUpdateDTO
+      // ----- 1) อัปเดตฟิลด์ของ Curriculum เอง -----
       const patch: CurriculumUpdateDTO = {
         curriculum_name: (row.name ?? current.name) || undefined,
         total_credit: row.credit ?? current.credit ?? undefined,
         start_year: row.startYear ?? current.startYear ?? undefined,
         faculty_id: (row.facultyId ?? current.facultyId) || undefined,
-        // ถ้าคุณมี field เพิ่มใน UI ค่อย map เพิ่ม:
-        // major_id: ...,
-        // book_id:  ...,
-        // description: ...,
       };
-
-      // ลบ key ที่เป็น undefined ออกจาก object (กันส่งค่าเปล่าๆไปทับ)
-      Object.keys(patch).forEach((k) => {
-        const keyK = k as keyof CurriculumUpdateDTO;
-        if (patch[keyK] === undefined) delete patch[keyK];
+      (Object.keys(patch) as (keyof CurriculumUpdateDTO)[]).forEach((k) => {
+        if (patch[k] === undefined) delete patch[k];
       });
+      if (Object.keys(patch).length > 0) {
+        await updateCurriculum(current.id, patch);
+      }
 
-      await updateCurriculum(current.id, patch);
+      // ----- 2) อัปเดตรายวิชา (subject-curriculum links) ด้วย "คู่คีย์" -----
+      const nextSubjects = asStringArray(row.subjectIds ?? current.subjectIds);
+      const prevSubjects = current.subjectIds ?? [];
 
-      // อัปเดต state ฝั่ง frontend ให้สะท้อนค่าที่เพิ่งบันทึก
+      const toAdd = nextSubjects.filter((id) => !prevSubjects.includes(id));
+      const toDel = prevSubjects.filter((id) => !nextSubjects.includes(id));
+
+      if (toAdd.length > 0) {
+        await Promise.all(
+          toAdd.map((sid) =>
+            createSubjectCurriculum({
+              SubjectID: String(sid),
+              CurriculumID: String(current.id), // ถ้า BE ใช้ major_id ให้แก้ service
+            })
+          )
+        );
+      }
+
+      if (toDel.length > 0) {
+        await Promise.all(
+          toDel.map((sid) =>
+            deleteSubjectCurriculumByPair({
+              subjectId: String(sid),
+              curriculumId: String(current.id),
+            })
+          )
+        );
+      }
+
+      // ----- 3) รีเฟรชรายวิชาจาก BE แล้วค่อยอัปเดต field อื่นในแถว -----
+      await refreshSubjectsFor(current.id);
+
       setData((prev) =>
         prev.map((it) =>
           it.key === key
@@ -335,6 +428,7 @@ const CHANGE: React.FC = () => {
                 startYear:
                   (patch.start_year as number | undefined) ?? it.startYear,
                 facultyId: patch.faculty_id ?? it.facultyId,
+                // ไม่เซ็ต subjectIds ตรงนี้ ปล่อยให้ค่าจาก refreshSubjectsFor ที่เพิ่งอัปเดตทำงาน
               }
             : it
         )
@@ -347,6 +441,7 @@ const CHANGE: React.FC = () => {
       message.error("บันทึกไม่สำเร็จ");
     }
   };
+
   // ลบแถวจริงจาก backend + ลบในตาราง
   const handleDelete = async (key: React.Key) => {
     const target = data.find((d) => d.key === key);
@@ -466,18 +561,17 @@ const CHANGE: React.FC = () => {
     },
   ];
 
-  // ----- แยกชนิดคอลัมน์ที่เป็น data column (ไม่ใช่ group) ก่อนใช้ dataIndex -----
+  // ----- แยกชนิดคอลัมน์ที่เป็น data column -----
   type DataColumn = Extract<
     ColumnsType<DataType>[number],
     ColumnType<DataType>
-  > & {
-    editable?: boolean;
-  };
+  > & { editable?: boolean };
+
   const isDataColumn = (
     col: ColumnsType<DataType>[number]
   ): col is DataColumn => (col as ColumnType<DataType>).dataIndex !== undefined;
 
-  // ----- ผูก onCell สำหรับ editable (คืน HTMLAttributes แต่สอดไส้ props ให้ EditableCell) -----
+  // ----- ผูก onCell สำหรับ editable -----
   const mergedColumns: ColumnsType<DataType> = columns.map((col) => {
     if (!isDataColumn(col) || !col.editable) return col;
 
@@ -490,7 +584,6 @@ const CHANGE: React.FC = () => {
         ? "multiselect"
         : "text";
 
-    // cast ผ่าน unknown เพื่อเลี่ยง any และให้ TS ยอมรับ HTMLAttributes
     return {
       ...col,
       onCell: (record: DataType) =>

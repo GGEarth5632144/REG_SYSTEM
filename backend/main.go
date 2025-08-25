@@ -15,6 +15,7 @@ import (
 
 	"reg_system/controller/degree"
 	"reg_system/controller/faculty"
+	"reg_system/controller/subjectcurriculum"
 	"reg_system/controller/major"
 	"reg_system/controller/position"
 	"reg_system/controller/status"
@@ -125,6 +126,14 @@ bookGroup := r.Group("/books")
     bookGroup.POST("/upload", curriculum.UploadBookFile) // POST /books/upload (อัปโหลดไฟล์)
     bookGroup.GET("/download/:id", curriculum.DownloadBookFile) // GET /books/download/:id (ดาวน์โหลดไฟล์)
     bookGroup.DELETE("/:id", curriculum.DeleteBookFile) // DELETE /books/:id (ลบไฟล์ + metadata)
+}
+// -------------------- Subject-Curriculums (link) --------------------
+subjectCurriculumGroup := r.Group("/subject-curriculums")
+{
+    subjectCurriculumGroup.GET("/", subjectcurriculum.GetSubjectCurriculumAll)       // GET /subject-curriculums (ดึงทั้งหมด)
+    subjectCurriculumGroup.GET("/:id", subjectcurriculum.GetSubjectCurriculumByID)   // GET /subject-curriculums/:id (ดูทีละรายการ)
+    subjectCurriculumGroup.POST("/", subjectcurriculum.CreateSubjectCurriculum)      // POST /subject-curriculums (สร้างใหม่)
+    subjectCurriculumGroup.DELETE("/:id", subjectcurriculum.DeleteSubjectCurriculum) // DELETE /subject-curriculums/:id (ลบตาม id)
 }
 
 

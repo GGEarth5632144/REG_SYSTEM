@@ -45,6 +45,7 @@ func SetupDatabase() {
 		&entity.Curriculum{},
 		&entity.Subjects{},
 		&entity.SubjectStudyTime{},
+		&entity.SubjectCurriculum{},
 
 	)
 
